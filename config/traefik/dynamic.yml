@@ -1,0 +1,12 @@
+# Static dynamic config, loaded by Traefik's file provider (no env-var
+# substitution happens here — that only applies to docker-compose.yml
+# labels, which is where the dashboard-auth middleware is defined).
+http:
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+

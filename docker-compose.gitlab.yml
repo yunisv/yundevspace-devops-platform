@@ -1,0 +1,73 @@
+# VCS + CI/CD + Issues + Container Registry + SAST: GitLab CE (Omnibus).
+# Chosen over a Gitea/OpenProject/SonarQube combo because it's the one
+# option in this space that's genuinely battle-tested at 10-50+ dev team
+# scale as a single integrated product, at the cost of being heavier
+# (plan for 8GB+ RAM for GitLab alone — see docs/architecture.md).
+
+networks:
+  edge:
+    external: true
+    name: devops_edge
+
+volumes:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:
+  gitlab-runner-config:
+
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:17.3.2-ce.0
+    restart: unless-stopped
+    hostname: git.${BASE_DOMAIN}
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'https://git.${BASE_DOMAIN}'
+        nginx['listen_port'] = 80
+        nginx['listen_https'] = false
+        gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+        prometheus_monitoring['enable'] = true
+        prometheus['listen_address'] = '0.0.0.0:9090'
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    ports:
+      - "2222:22" # git over SSH
+    shm_size: 256m
+    networks:
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.gitlab.rule=Host(`git.${BASE_DOMAIN}`)
+      - traefik.http.routers.gitlab.entrypoints=websecure
+      - traefik.http.routers.gitlab.tls.certresolver=le
+      - traefik.http.services.gitlab.loadbalancer.server.port=80
+
+  # Register after GitLab is up (Admin Area > CI/CD > Runners > New instance
+  # runner) and put the resulting auth token (starts with glrt-) in .env as
+  # GITLAB_RUNNER_TOKEN — see docs/architecture.md.
+  gitlab-runner:
+    image: gitlab/gitlab-runner:v17.3.1
+    restart: unless-stopped
+    depends_on:
+      - gitlab
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gitlab-runner-config:/etc/gitlab-runner
+    networks:
+      - edge
+    entrypoint: >
+      /bin/sh -c "
+        if [ ! -f /etc/gitlab-runner/config.toml ]; then
+          gitlab-runner register --non-interactive
+            --url https://git.${BASE_DOMAIN}
+            --token ${GITLAB_RUNNER_TOKEN}
+            --executor docker
+            --docker-image docker:24-git
+            --docker-volumes /var/run/docker.sock:/var/run/docker.sock
+            --description docker-runner-1;
+        fi &&
+        /usr/bin/dumb-init /entrypoint run
+      "

@@ -1,0 +1,38 @@
+# Automation glue: n8n. Receives webhooks from Gitea (PR opened, pipeline
+# finished), DefectDojo (new finding), Alertmanager, etc. and routes them
+# to Slack/Telegram/OpenProject tickets. This is also the intended host
+# for the future AI-agent workflows (see docs/ai-agents-roadmap.md) —
+# n8n calls out to an LLM API node and feeds the result back into the
+# pipeline (e.g. as a Gitea PR comment or a pipeline gate).
+
+networks:
+  edge:
+    external: true
+    name: devops_edge
+
+volumes:
+  n8n-data:
+
+services:
+  n8n:
+    image: n8nio/n8n:1.60.1
+    restart: unless-stopped
+    environment:
+      N8N_HOST: automation.${BASE_DOMAIN}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://automation.${BASE_DOMAIN}/
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      GENERIC_TIMEZONE: Europe/Moscow
+    volumes:
+      - n8n-data:/home/node/.n8n
+    networks:
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.n8n.rule=Host(`automation.${BASE_DOMAIN}`)
+      - traefik.http.routers.n8n.entrypoints=websecure
+      - traefik.http.routers.n8n.tls.certresolver=le
+      - traefik.http.services.n8n.loadbalancer.server.port=5678
