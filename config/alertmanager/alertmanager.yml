@@ -1,0 +1,14 @@
+route:
+  receiver: default
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: default
+    # Point this at n8n's webhook endpoint so alerts can be routed to
+    # Slack/Telegram/PM tickets through the same automation layer used
+    # for CI/CD events. Example:
+    # webhook_configs:
+    #   - url: https://automation.${BASE_DOMAIN}/webhook/alertmanager

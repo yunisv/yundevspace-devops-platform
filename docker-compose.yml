@@ -1,0 +1,80 @@
+# Core layer: reverse proxy + TLS + SSO.
+# Every other stack file (docker-compose.*.yml) attaches to the `edge` network
+# and gets its routing defined via Traefik labels, so services can be added
+# or removed independently of this file.
+
+networks:
+  edge:
+    name: devops_edge
+
+volumes:
+  traefik-acme:
+  keycloak-db-data:
+
+services:
+  traefik:
+    image: traefik:v3.1
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/acme/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --api.dashboard=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-acme:/acme
+      - ./config/traefik/dynamic.yml:/etc/traefik/dynamic/dynamic.yml:ro
+    networks:
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik.rule=Host(`traefik.${BASE_DOMAIN}`)
+      - traefik.http.routers.traefik.entrypoints=websecure
+      - traefik.http.routers.traefik.tls.certresolver=le
+      - traefik.http.routers.traefik.service=api@internal
+      - traefik.http.routers.traefik.middlewares=dashboard-auth
+      - traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
+
+  keycloak-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    networks:
+      - edge
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    restart: unless-stopped
+    command: start --optimized --proxy-headers=xforwarded --hostname-strict=false
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    depends_on:
+      - keycloak-db
+    networks:
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.keycloak.rule=Host(`sso.${BASE_DOMAIN}`)
+      - traefik.http.routers.keycloak.entrypoints=websecure
+      - traefik.http.routers.keycloak.tls.certresolver=le
+      - traefik.http.services.keycloak.loadbalancer.server.port=8080
