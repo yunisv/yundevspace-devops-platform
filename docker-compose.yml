@@ -34,6 +34,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-acme:/acme
       - ./config/traefik/dynamic.yml:/etc/traefik/dynamic/dynamic.yml:ro
+      - ./secrets/dashboard.htpasswd:/etc/traefik/dashboard.htpasswd:ro
     networks:
       - edge
     labels:
@@ -43,7 +44,7 @@ services:
       - traefik.http.routers.traefik.tls.certresolver=le
       - traefik.http.routers.traefik.service=api@internal
       - traefik.http.routers.traefik.middlewares=dashboard-auth
-      - traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
+      - traefik.http.middlewares.dashboard-auth.basicauth.usersfile=/etc/traefik/dashboard.htpasswd
 
   keycloak-db:
     image: postgres:16-alpine

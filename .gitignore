@@ -1,0 +1,7 @@
+# Real secrets — never commit
+.env
+secrets/*
+!secrets/.gitkeep
+
+# OS
+.DS_Store

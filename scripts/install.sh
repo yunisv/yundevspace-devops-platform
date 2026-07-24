@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# One-shot bootstrap for a fresh server: checks/installs Docker, prepares
+# the devops_edge network and sysctl settings, generates .env with random
+# secrets, and brings the platform up. Idempotent — safe to re-run (skips
+# steps that are already done, never overwrites an existing .env).
+#
+# Usage (as root):
+#   ./scripts/install.sh                                # gitlab + monitoring + automation
+#   ./scripts/install.sh --minimal                       # core + gitlab only
+#   ./scripts/install.sh --layers "gitlab automation"    # pick specific layers
+#
+# Non-interactive: export BASE_DOMAIN and ACME_EMAIL before running.
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+LAYERS="gitlab monitoring automation"
+for arg in "$@"; do
+  case "$arg" in
+    --minimal) LAYERS="gitlab" ;;
+    --layers=*) LAYERS="${arg#--layers=}" ;;
+    -h|--help)
+      echo "Usage: $0 [--minimal] [--layers=\"gitlab monitoring automation\"]"
+      exit 0
+      ;;
+    *)
+      echo "Неизвестный аргумент: $arg" >&2
+      exit 1
+      ;;
+  esac
+done
+
+log() { printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
+warn() { printf '\033[1;33mWARN: %s\033[0m\n' "$1" >&2; }
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Запускать от root (sudo ./scripts/install.sh) — нужно ставить пакеты и sysctl." >&2
+  exit 1
+fi
+
+# --- 1. OS check ---------------------------------------------------------
+if [ ! -f /etc/os-release ]; then
+  echo "Не удалось определить ОС (/etc/os-release отсутствует)." >&2
+  exit 1
+fi
+# shellcheck disable=SC1091
+. /etc/os-release
+case "${ID:-}" in
+  ubuntu|debian) ;;
+  *)
+    echo "ОС '${ID:-unknown}' не поддерживается этим скриптом (только Ubuntu/Debian)." >&2
+    echo "Поставьте Docker Engine + Compose plugin вручную и запустите ./scripts/up.sh напрямую." >&2
+    exit 1
+    ;;
+esac
+
+# --- 2. Base packages -----------------------------------------------------
+log "Базовые пакеты (curl, openssl, apache2-utils)"
+apt-get update -y
+apt-get install -y --no-install-recommends curl ca-certificates openssl apache2-utils
+
+# --- 3. Docker + Compose plugin -------------------------------------------
+log "Проверка Docker"
+if ! command -v docker >/dev/null 2>&1; then
+  log "Docker не найден — устанавливаю (официальный скрипт get.docker.com)"
+  curl -fsSL https://get.docker.com | sh
+  systemctl enable --now docker
+else
+  echo "Docker уже установлен: $(docker --version)"
+fi
+
+if ! docker compose version >/dev/null 2>&1; then
+  log "Docker Compose plugin не найден — устанавливаю"
+  apt-get install -y docker-compose-plugin
+fi
+
+# --- 4. sysctl (нужно для будущих OpenSearch/Elasticsearch-компонентов, --
+#        например если позже подключите Plane с полнотекстовым поиском) ---
+log "Настройка vm.max_map_count"
+current_map_count="$(sysctl -n vm.max_map_count)"
+if [ "$current_map_count" -lt 262144 ]; then
+  echo "vm.max_map_count=262144" > /etc/sysctl.d/99-devops-platform.conf
+  sysctl --system >/dev/null
+  echo "Выставлено 262144 (было ${current_map_count})"
+else
+  echo "Уже ${current_map_count} (>= 262144) — пропускаю"
+fi
+
+# --- 5. Docker-сеть --------------------------------------------------------
+log "Docker-сеть devops_edge"
+if docker network inspect devops_edge >/dev/null 2>&1; then
+  echo "Уже существует"
+else
+  docker network create devops_edge
+  echo "Создана"
+fi
+
+# --- 6. Firewall (ufw), если используется ----------------------------------
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+  log "ufw активен — открываю 80/443 (http/https) и 2222 (git ssh)"
+  ufw allow 80/tcp >/dev/null
+  ufw allow 443/tcp >/dev/null
+  ufw allow 2222/tcp >/dev/null
+else
+  warn "ufw не активен/не установлен — откройте 80, 443, 2222 своим фаерволом вручную, если он есть."
+fi
+
+# --- 7. .env + секреты ------------------------------------------------------
+mkdir -p secrets
+
+if [ ! -f .env ]; then
+  log ".env не найден — создаю и генерирую секреты"
+  cp .env.example .env
+
+  domain="${BASE_DOMAIN:-}"
+  email="${ACME_EMAIL:-}"
+  if [ -z "$domain" ] && [ -t 0 ]; then
+    read -rp "Домен для платформы (BASE_DOMAIN, напр. devops.company.com): " domain
+  fi
+  if [ -z "$email" ] && [ -t 0 ]; then
+    read -rp "Email для Let's Encrypt (ACME_EMAIL): " email
+  fi
+  if [ -z "$domain" ] || [ -z "$email" ]; then
+    echo "BASE_DOMAIN и ACME_EMAIL обязательны (передайте как env-переменные для неинтерактивного запуска)." >&2
+    exit 1
+  fi
+
+  sed -i "s#^BASE_DOMAIN=.*#BASE_DOMAIN=${domain}#" .env
+  sed -i "s#^ACME_EMAIL=.*#ACME_EMAIL=${email}#" .env
+
+  # Все "change-me..." значения из .env.example заменяются на случайные секреты.
+  while IFS='=' read -r key value; do
+    [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
+    if [[ "$value" == change-me* ]]; then
+      secret="$(openssl rand -hex 24)"
+      sed -i "s#^${key}=.*#${key}=${secret}#" .env
+    fi
+  done < .env.example
+
+  echo "Секреты сгенерированы в .env. Сохраните файл в надёжном месте (или подключите Vault позже)."
+else
+  echo ".env уже существует — не трогаю (удалите файл, если хотите пересоздать с нуля)."
+fi
+
+# shellcheck disable=SC1091
+source .env
+
+# Traefik dashboard basic-auth — отдельным файлом (htpasswd), не через .env:
+# передача hash-а через переменную окружения ломается на `$`-экранировании
+# при подстановке docker compose (проверено на практике).
+if [ ! -f secrets/dashboard.htpasswd ]; then
+  log "Генерирую пароль для Traefik dashboard"
+  dash_pass="$(openssl rand -base64 18)"
+  htpasswd -Bbn admin "$dash_pass" > secrets/dashboard.htpasswd
+  echo "Traefik dashboard (https://traefik.${BASE_DOMAIN:-<домен>}): admin / ${dash_pass}"
+  echo "^ сохраните этот пароль — он больше нигде не выводится и не хранится в открытом виде."
+else
+  echo "secrets/dashboard.htpasswd уже существует — пропускаю."
+fi
+
+# --- 8. Поднимаем сервисы ---------------------------------------------------
+log "Поднимаю слои: core ${LAYERS}"
+chmod +x scripts/up.sh
+./scripts/up.sh $LAYERS
+
+log "Готово"
+cat <<EOF
+
+Дальше руками (подробности в README.md):
+  1. https://sso.\${BASE_DOMAIN} — создать realm/клиентов в Keycloak.
+  2. https://git.\${BASE_DOMAIN} — войти как root / пароль из GITLAB_ROOT_PASSWORD в .env
+     (GitLab поднимается 3-5 минут при первом старте — 'docker compose logs -f gitlab').
+  3. Admin Area -> CI/CD -> Runners -> New instance runner -> токен -> в .env как
+     GITLAB_RUNNER_TOKEN, затем:
+     docker compose -f docker-compose.yml -f docker-compose.gitlab.yml up -d gitlab-runner
+  4. Plane / DefectDojo / Harbor ставятся отдельно официальными установщиками —
+     см. docs/adding-plane.md и docs/adding-defectdojo-harbor.md.
+EOF
