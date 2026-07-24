@@ -6,7 +6,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ ! -f .env ]; then
-  echo "Missing .env — copy .env.example to .env and fill in secrets first." >&2
+  echo "Missing .env — run ./scripts/install.sh first (or copy .env.example manually)." >&2
+  exit 1
+fi
+
+if [ ! -f secrets/dashboard.htpasswd ]; then
+  echo "Missing secrets/dashboard.htpasswd — run ./scripts/install.sh first (Traefik needs it to start)." >&2
   exit 1
 fi
 

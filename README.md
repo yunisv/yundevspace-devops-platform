@@ -32,20 +32,31 @@ Roadmap по AI-агентам — в [docs/ai-agents-roadmap.md](docs/ai-agents
 
 ## Быстрый старт
 
-Требования: Docker + Docker Compose plugin на сервере, DNS-записи (или
-wildcard) на нужные поддомены `*.${BASE_DOMAIN}`, открытые 80/443 порты,
+Требования: свежий сервер Ubuntu/Debian, DNS-записи (или wildcard) на
+нужные поддомены `*.${BASE_DOMAIN}`, открытые 80/443/2222 порты,
 **минимум 8GB RAM только под GitLab** (см. таблицу ресурсов ниже).
 
+Один файл на сервере — ставит Docker (если его нет), настраивает sysctl,
+сеть, генерирует случайные секреты в `.env`, поднимает выбранные слои:
+
 ```bash
-cp .env.example .env
-$EDITOR .env   # заполнить пароли, домен, email для Let's Encrypt
-
-# core + GitLab — минимальный рабочий набор
-./scripts/up.sh gitlab
-
-# добавить мониторинг и автоматизацию
-./scripts/up.sh monitoring automation
+git clone <url-этого-репозитория> devops-platform && cd devops-platform
+sudo ./scripts/install.sh                       # gitlab + мониторинг + автоматизация
+# sudo ./scripts/install.sh --minimal            # только core + GitLab
+# sudo ./scripts/install.sh --layers="gitlab automation"  # свой набор слоёв
 ```
+
+Скрипт идемпотентен — его можно перезапускать (не трогает уже
+существующий `.env`, пропускает уже установленные пакеты). Он спросит
+`BASE_DOMAIN` и `ACME_EMAIL` интерактивно, либо возьмёт их из переменных
+окружения для неинтерактивного запуска, и один раз выведет
+сгенерированный пароль от Traefik dashboard — сохраните его сразу, второй
+раз он нигде не показывается (лежит только как bcrypt-хэш в
+`secrets/dashboard.htpasswd`).
+
+Если сервер не Ubuntu/Debian — ставьте Docker + Compose plugin вручную,
+затем `cp .env.example .env`, заполните и запускайте `./scripts/up.sh
+<слои>` напрямую (то, что `install.sh` делает поверх этого — только ОС-специфичные шаги).
 
 После первого запуска (GitLab поднимается 3-5 минут при первом старте):
 
