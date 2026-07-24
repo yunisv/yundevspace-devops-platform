@@ -14,6 +14,8 @@ flowchart TB
         runner["GitLab Runner"]
     end
 
+    plane["Plane<br/>(issue tracking / PM)"]
+
     subgraph quality["Управление уязвимостями"]
         dojo["DefectDojo (агрегатор находок)"]
         harbor["Harbor (опционально, если нужен registry с расширенным сканированием)"]
@@ -33,10 +35,13 @@ flowchart TB
     runner -->|отчёты SAST/DAST/SCA| dojo
     runner -->|push image| gitlab
     gitlab -.->|опционально| harbor
+    gitlab <-->|MR ↔ задача, статусы| plane
     gitlab -- webhook --> n8n
+    plane -- webhook --> n8n
     dojo -- webhook --> n8n
     am -- webhook --> n8n
     n8n --> gitlab
+    n8n --> plane
     n8n -.->|будущее: вызов LLM API<br/>для оценки риска MR/находки| n8n
     runner --> prom
     prom --> graf
@@ -60,7 +65,8 @@ flowchart TB
 |---|---|---|---|
 | Reverse proxy / TLS | Traefik | единая точка входа, авто-TLS | легче nginx+certbot в docker-окружении |
 | SSO | Keycloak | единый вход во все инструменты | GitLab решает это только внутри себя, здесь нужен общий слой поверх нескольких сервисов |
-| VCS + CI/CD + Issues + Registry + SAST | GitLab CE | git, MR, пайплайны, доски задач, container registry, встроенный SAST/dependency scanning | единственный вариант, проверенный боем именно как цельный продукт на масштабе 10-50+ разработчиков — не пришлось стыковать 3 отдельных вендора (git-сервер + трекер + сканер) руками |
+| VCS + CI/CD + Registry + SAST | GitLab CE | git, MR, пайплайны, container registry, встроенный SAST/dependency scanning | единственный вариант, проверенный боем именно как цельный продукт на масштабе 10-50+ разработчиков — не пришлось стыковать несколько отдельных вендоров (git-сервер + сканер) руками |
+| Issue tracking / PM | Plane | эпики, roadmap, циклы (спринты), бэклог для не-технических стейкхолдеров | то, что в GitLab CE без Premium/Ultimate недоступно (эпики/roadmap/burndown платные); у Plane это бесплатно + полноценные REST API и вебхуки на каждое событие — удобно и для GitLab-интеграции, и для будущих AI-агентов (см. `adding-plane.md`) |
 | Управление уязвимостями | DefectDojo | агрегация SAST/DAST/SCA отчётов из разных источников, дедупликация находок | то, что GitLab CE (без Ultimate-тарифа) не делает — единая база находок |
 | Registry с расширенным сканированием | Harbor (опционально) | если штатного GitLab Container Registry + Trivy окажется мало | см. `adding-defectdojo-harbor.md` |
 | Мониторинг | Prometheus/Grafana/Loki/Alertmanager | метрики, логи, алерты | стандарт де-факто, огромная экосистема экспортеров, GitLab отдаёт метрики в формате Prometheus "из коробки" |
@@ -115,7 +121,12 @@ Container Registry), отдельный Harbor для этого не нужен
 |---|---|---|---|
 | Минимум (core + GitLab) | 4 | 8-10 GB | 60 GB SSD |
 | Рекомендуемый (+ мониторинг + автоматизация) | 6-8 | 16 GB | 150 GB SSD |
-| С DefectDojo + Harbor поверх | 8-12 | 24-32 GB | 300+ GB SSD (registry растёт быстро) |
+| + Plane (Postgres/Redis/RabbitMQ/MinIO + web/api/worker/live) | 10-12 | 22-24 GB | 150 GB SSD |
+| + DefectDojo + Harbor поверх | 12-16 | 28-32 GB | 300+ GB SSD (registry растёт быстро) |
+
+Plane официально заявляет минимум 2 vCPU/4GB, но это без запаса под
+RabbitMQ/MinIO под реальной нагрузкой нескольких команд — закладывайте
+4 vCPU/6-8GB сверх основного стека.
 
 GitLab CE официально не рекомендуется запускать менее чем на 8GB RAM даже
 для маленьких команд — при нехватке памяти чаще всего страдает Sidekiq и

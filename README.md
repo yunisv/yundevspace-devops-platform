@@ -1,10 +1,10 @@
 # DevOps-платформа компании
 
 Docker-based скелет внутренней платформы для команды 10-50 разработчиков:
-VCS + CI/CD + issue tracking + registry + SAST (через GitLab CE), управление
-уязвимостями (DefectDojo), мониторинг и слой автоматизации с заделом под
-AI-агентов (n8n). Подробная архитектура и обоснование выбора — в
-[docs/architecture.md](docs/architecture.md).
+VCS + CI/CD + registry + SAST (через GitLab CE), управление задачами/PM
+(Plane), управление уязвимостями (DefectDojo), мониторинг и слой
+автоматизации с заделом под AI-агентов (n8n). Подробная архитектура и
+обоснование выбора — в [docs/architecture.md](docs/architecture.md).
 
 Ядро — **GitLab CE**, а не набор из отдельных Gitea/Jira/SonarQube: это
 единственный вариант в этом пространстве, реально проверенный боем именно
@@ -21,9 +21,12 @@ AI-агентов (n8n). Подробная архитектура и обосн
 | Мониторинг | `docker-compose.monitoring.yml` | Prometheus, Grafana, Loki, Promtail, Alertmanager, node-exporter, cAdvisor |
 | Автоматизация / AI-агенты | `docker-compose.automation.yml` | n8n |
 
-DefectDojo (агрегация находок SAST/DAST/SCA) и Harbor (registry с расширенным
-сканированием, если GitLab-registry+Trivy окажется недостаточно) подключаются
-отдельно официальными установщиками — инструкция в
+Plane (issue tracking/PM), DefectDojo (агрегация находок SAST/DAST/SCA) и
+Harbor (registry с расширенным сканированием, если GitLab-registry+Trivy
+окажется недостаточно) подключаются отдельно официальными установщиками —
+их self-hosted дистрибутивы это 5-8 взаимозависимых сервисов каждый,
+вендорить такое в свой compose и держать в синхроне с апстримом не стоит.
+Инструкции: [docs/adding-plane.md](docs/adding-plane.md),
 [docs/adding-defectdojo-harbor.md](docs/adding-defectdojo-harbor.md).
 Roadmap по AI-агентам — в [docs/ai-agents-roadmap.md](docs/ai-agents-roadmap.md).
 
@@ -50,7 +53,8 @@ $EDITOR .env   # заполнить пароли, домен, email для Let's
 2. `https://git.${BASE_DOMAIN}` — залогиниться как `root` / `GITLAB_ROOT_PASSWORD`, создать первую группу/проект.
 3. Admin Area → CI/CD → Runners → New instance runner — скопировать токен, прописать в `.env` как `GITLAB_RUNNER_TOKEN`, поднять `gitlab-runner`.
 4. `https://grafana.${BASE_DOMAIN}` — датасорсы Prometheus/Loki уже прописаны автоматически.
-5. `https://automation.${BASE_DOMAIN}` — настроить workflow'ы n8n под вебхуки GitLab/DefectDojo/Alertmanager.
+5. `https://automation.${BASE_DOMAIN}` — настроить workflow'ы n8n под вебхуки GitLab/Plane/DefectDojo/Alertmanager.
+6. Plane ставится отдельно по [docs/adding-plane.md](docs/adding-plane.md) — там же настройка GitLab-интеграции и вебхуков в n8n.
 
 ## Ресурсы сервера
 
@@ -58,7 +62,8 @@ $EDITOR .env   # заполнить пароли, домен, email для Let's
 |---|---|---|---|
 | Минимум (core + GitLab) | 4 | 8-10 GB | 60 GB SSD |
 | Рекомендуемый (+ мониторинг + автоматизация) | 6-8 | 16 GB | 150 GB SSD |
-| С DefectDojo/Harbor поверх | 8-12 | 24-32 GB | 300+ GB SSD (registry растёт быстро) |
+| + Plane | 10-12 | 22-24 GB | 150 GB SSD |
+| + DefectDojo/Harbor поверх | 12-16 | 28-32 GB | 300+ GB SSD (registry растёт быстро) |
 
 Подробности и пример `.gitlab-ci.yml` с публикацией находок в DefectDojo — в `docs/architecture.md`.
 
