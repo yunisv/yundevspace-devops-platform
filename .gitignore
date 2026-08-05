@@ -8,3 +8,7 @@ secrets/*
 
 # Rendered from access.yml.template by install.sh (contains the real subnets)
 config/traefik/dynamic/access.yml
+
+# Local backup archives (scripts/backup.sh) — contain secrets, copy them
+# off-server instead of committing them anywhere
+backups/

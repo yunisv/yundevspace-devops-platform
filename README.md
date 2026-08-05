@@ -114,6 +114,14 @@ ufw. Сертификаты выпускаются через DNS-01, так ч�
 
 Подробности и пример `.gitlab-ci.yml` с публикацией находок в DefectDojo — в `docs/architecture.md`.
 
+## Бэкапы
+
+`./scripts/backup.sh` — GitLab (штатным `gitlab-backup create`), база
+Keycloak, TLS-состояние Traefik, `.env`/`secrets/`. Подробности, cron и
+восстановление — в [docs/backups.md](docs/backups.md). Архив создаётся на
+этом же сервере — сам по себе бэкапом не является, пока не скопирован
+куда-то ещё.
+
 ## Что дальше
 
 - Terraform/Ansible для провижининга самого сервера(-ов) — добавляются, как
