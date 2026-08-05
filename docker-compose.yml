@@ -27,6 +27,14 @@ services:
       - --certificatesresolvers.le.acme.storage=/acme/acme.json
       - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
       - --api.dashboard=true
+      # Prometheus scrapes this (see config/prometheus/prometheus.yml). Without
+      # these flags there is nothing listening for metrics at all.
+      - --entrypoints.metrics.address=:8082
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entrypoint=metrics
+      # Applies the headers middleware from config/traefik/dynamic.yml to every
+      # router on this entrypoint, instead of leaving it defined but unused.
+      - --entrypoints.websecure.http.middlewares=security-headers@file
     ports:
       - "80:80"
       - "443:443"
@@ -61,7 +69,10 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
     restart: unless-stopped
-    command: start --optimized --proxy-headers=xforwarded --hostname-strict=false
+    # Plain `start`, not `start --optimized`: `db` is a build-time option, so
+    # --optimized would run against the image's default (dev-file) build and
+    # ignore KC_DB below. `start` performs the build on first boot instead.
+    command: start --proxy-headers=xforwarded --hostname-strict=false
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak

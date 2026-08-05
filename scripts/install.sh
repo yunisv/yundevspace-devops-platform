@@ -7,7 +7,7 @@
 # Usage (as root):
 #   ./scripts/install.sh                                # gitlab + monitoring + automation
 #   ./scripts/install.sh --minimal                       # core + gitlab only
-#   ./scripts/install.sh --layers "gitlab automation"    # pick specific layers
+#   ./scripts/install.sh --layers="gitlab automation"    # pick specific layers
 #
 # Non-interactive: export BASE_DOMAIN and ACME_EMAIL before running.
 set -euo pipefail
@@ -167,13 +167,18 @@ chmod +x scripts/up.sh
 log "Готово"
 cat <<EOF
 
+Проверьте, что DNS указывает на этот сервер (A-записи или wildcard *.${BASE_DOMAIN}):
+  git, registry, sso, traefik, grafana, prometheus, alerts, automation
+
 Дальше руками (подробности в README.md):
-  1. https://sso.\${BASE_DOMAIN} — создать realm/клиентов в Keycloak.
-  2. https://git.\${BASE_DOMAIN} — войти как root / пароль из GITLAB_ROOT_PASSWORD в .env
-     (GitLab поднимается 3-5 минут при первом старте — 'docker compose logs -f gitlab').
-  3. Admin Area -> CI/CD -> Runners -> New instance runner -> токен -> в .env как
-     GITLAB_RUNNER_TOKEN, затем:
-     docker compose -f docker-compose.yml -f docker-compose.gitlab.yml up -d gitlab-runner
-  4. Plane / DefectDojo / Harbor ставятся отдельно официальными установщиками —
+  1. https://git.${BASE_DOMAIN} — войти как root, пароль в .env (GITLAB_ROOT_PASSWORD).
+     Первый старт GitLab занимает 3-5 минут: docker compose logs -f gitlab
+  2. Admin Area -> CI/CD -> Runners -> New instance runner -> скопировать токен
+     (glrt-...) -> вписать в .env как GITLAB_RUNNER_TOKEN, затем поднять раннер:
+     docker compose -f docker-compose.yml -f docker-compose.gitlab.yml --profile runner up -d
+  3. https://automation.${BASE_DOMAIN} — сразу создать owner-аккаунт в n8n
+     (до этого момента любой, кто откроет адрес, может занять его первым).
+  4. https://sso.${BASE_DOMAIN} — создать realm/клиентов в Keycloak.
+  5. Plane / DefectDojo / Harbor ставятся отдельно официальными установщиками —
      см. docs/adding-plane.md и docs/adding-defectdojo-harbor.md.
 EOF

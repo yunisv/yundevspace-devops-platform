@@ -1,9 +1,9 @@
-# Automation glue: n8n. Receives webhooks from Gitea (PR opened, pipeline
-# finished), DefectDojo (new finding), Alertmanager, etc. and routes them
-# to Slack/Telegram/OpenProject tickets. This is also the intended host
-# for the future AI-agent workflows (see docs/ai-agents-roadmap.md) —
-# n8n calls out to an LLM API node and feeds the result back into the
-# pipeline (e.g. as a Gitea PR comment or a pipeline gate).
+# Automation glue: n8n. Receives webhooks from GitLab (MR opened, pipeline
+# finished), Plane (task created/updated), DefectDojo (new finding),
+# Alertmanager, etc. and routes them to Slack/Telegram/Plane tickets. This
+# is also the intended host for the future AI-agent workflows (see
+# docs/ai-agents-roadmap.md) — n8n calls out to an LLM API node and feeds
+# the result back into the pipeline (e.g. as a GitLab MR comment or a gate).
 
 networks:
   edge:
@@ -22,10 +22,11 @@ services:
       N8N_PROTOCOL: https
       WEBHOOK_URL: https://automation.${BASE_DOMAIN}/
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-      N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
-      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
       GENERIC_TIMEZONE: Europe/Moscow
+      # No N8N_BASIC_AUTH_* here: n8n removed basic auth in 1.0 (this image is
+      # 1.60.1), so those variables are silently ignored. Access is controlled
+      # by n8n's own user management — create the owner account on first visit,
+      # and do it immediately: until you do, anyone reaching the URL can claim it.
     volumes:
       - n8n-data:/home/node/.n8n
     networks:

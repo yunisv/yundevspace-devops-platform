@@ -32,9 +32,16 @@ Roadmap по AI-агентам — в [docs/ai-agents-roadmap.md](docs/ai-agents
 
 ## Быстрый старт
 
-Требования: свежий сервер Ubuntu/Debian, DNS-записи (или wildcard) на
-нужные поддомены `*.${BASE_DOMAIN}`, открытые 80/443/2222 порты,
-**минимум 8GB RAM только под GitLab** (см. таблицу ресурсов ниже).
+Требования: свежий сервер Ubuntu/Debian, открытые 80/443/2222 порты,
+**минимум 8GB RAM только под GitLab** (см. таблицу ресурсов ниже), и DNS,
+указывающий на сервер — либо wildcard `*.${BASE_DOMAIN}`, либо A-записи на
+каждый поддомен:
+
+`git`, `registry`, `sso`, `traefik`, `grafana`, `prometheus`, `alerts`,
+`automation` (+ `pm` и `dojo`, если ставите Plane/DefectDojo).
+
+Без корректного DNS Let's Encrypt не выдаст сертификаты — HTTP-01 challenge
+требует, чтобы домен уже резолвился на этот сервер.
 
 Один файл на сервере — ставит Docker (если его нет), настраивает sysctl,
 сеть, генерирует случайные секреты в `.env`, поднимает выбранные слои:
@@ -62,9 +69,9 @@ sudo ./scripts/install.sh                       # gitlab + мониторинг 
 
 1. `https://sso.${BASE_DOMAIN}` — создать realm/клиентов в Keycloak для остальных сервисов.
 2. `https://git.${BASE_DOMAIN}` — залогиниться как `root` / `GITLAB_ROOT_PASSWORD`, создать первую группу/проект.
-3. Admin Area → CI/CD → Runners → New instance runner — скопировать токен, прописать в `.env` как `GITLAB_RUNNER_TOKEN`, поднять `gitlab-runner`.
+3. Admin Area → CI/CD → Runners → New instance runner — скопировать токен, прописать в `.env` как `GITLAB_RUNNER_TOKEN`, поднять раннер (он в профиле `runner`, поэтому сам не стартует): `docker compose -f docker-compose.yml -f docker-compose.gitlab.yml --profile runner up -d`
 4. `https://grafana.${BASE_DOMAIN}` — датасорсы Prometheus/Loki уже прописаны автоматически.
-5. `https://automation.${BASE_DOMAIN}` — настроить workflow'ы n8n под вебхуки GitLab/Plane/DefectDojo/Alertmanager.
+5. `https://automation.${BASE_DOMAIN}` — **сразу создать owner-аккаунт** (n8n убрал basic-auth в версии 1.0, доступ закрывает только собственный аккаунт — пока он не создан, занять его может любой, кто откроет адрес), затем настроить workflow'ы под вебхуки GitLab/Plane/DefectDojo/Alertmanager.
 6. Plane ставится отдельно по [docs/adding-plane.md](docs/adding-plane.md) — там же настройка GitLab-интеграции и вебхуков в n8n.
 
 ## Ресурсы сервера

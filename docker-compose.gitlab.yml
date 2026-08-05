@@ -27,8 +27,18 @@ services:
         nginx['listen_https'] = false
         gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
-        prometheus_monitoring['enable'] = true
-        prometheus['listen_address'] = '0.0.0.0:9090'
+        # Built-in Container Registry — the CI examples in docs/architecture.md
+        # rely on the CI_REGISTRY_IMAGE variable, which GitLab only defines
+        # for pipelines when the registry is enabled here.
+        registry_external_url 'https://registry.${BASE_DOMAIN}'
+        registry_nginx['listen_port'] = 5050
+        registry_nginx['listen_https'] = false
+        # GitLab's own bundled Prometheus stays off: we run a standalone one
+        # (docker-compose.monitoring.yml) and the bundled stack costs ~1GB RAM.
+        prometheus_monitoring['enable'] = false
+        # /-/metrics returns 404 unless the scraping IP is whitelisted. These
+        # are the private ranges Docker allocates bridge networks from.
+        gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
     volumes:
       - gitlab-config:/etc/gitlab
       - gitlab-logs:/var/log/gitlab
@@ -40,17 +50,28 @@ services:
       - edge
     labels:
       - traefik.enable=true
+      # Two routers on one container, so each needs its service named explicitly.
       - traefik.http.routers.gitlab.rule=Host(`git.${BASE_DOMAIN}`)
       - traefik.http.routers.gitlab.entrypoints=websecure
       - traefik.http.routers.gitlab.tls.certresolver=le
+      - traefik.http.routers.gitlab.service=gitlab
       - traefik.http.services.gitlab.loadbalancer.server.port=80
+      - traefik.http.routers.gitlab-registry.rule=Host(`registry.${BASE_DOMAIN}`)
+      - traefik.http.routers.gitlab-registry.entrypoints=websecure
+      - traefik.http.routers.gitlab-registry.tls.certresolver=le
+      - traefik.http.routers.gitlab-registry.service=gitlab-registry
+      - traefik.http.services.gitlab-registry.loadbalancer.server.port=5050
 
-  # Register after GitLab is up (Admin Area > CI/CD > Runners > New instance
-  # runner) and put the resulting auth token (starts with glrt-) in .env as
-  # GITLAB_RUNNER_TOKEN — see docs/architecture.md.
+  # Not started by default (profile `runner`): registration needs a token that
+  # only exists after GitLab's first boot — Admin Area > CI/CD > Runners > New
+  # instance runner. Put it in .env as GITLAB_RUNNER_TOKEN, then:
+  #   docker compose -f docker-compose.yml -f docker-compose.gitlab.yml \
+  #     --profile runner up -d
+  # See docs/architecture.md.
   gitlab-runner:
     image: gitlab/gitlab-runner:v17.3.1
     restart: unless-stopped
+    profiles: [runner]
     depends_on:
       - gitlab
     volumes:
@@ -58,16 +79,25 @@ services:
       - gitlab-runner-config:/etc/gitlab-runner
     networks:
       - edge
-    entrypoint: >
-      /bin/sh -c "
+    # List form + literal block: a folded (`>`) scalar keeps newlines on
+    # more-indented lines, which would split the register command into
+    # separate shell commands. Backslash continuations avoid that entirely.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
         if [ ! -f /etc/gitlab-runner/config.toml ]; then
-          gitlab-runner register --non-interactive
-            --url https://git.${BASE_DOMAIN}
-            --token ${GITLAB_RUNNER_TOKEN}
-            --executor docker
-            --docker-image docker:24-git
-            --docker-volumes /var/run/docker.sock:/var/run/docker.sock
-            --description docker-runner-1;
-        fi &&
-        /usr/bin/dumb-init /entrypoint run
-      "
+          if [ -z "${GITLAB_RUNNER_TOKEN}" ]; then
+            echo "GITLAB_RUNNER_TOKEN is empty — create an instance runner in GitLab, put the glrt-... token in .env, then restart this service."
+            exit 1
+          fi
+          gitlab-runner register --non-interactive \
+            --url "https://git.${BASE_DOMAIN}" \
+            --token "${GITLAB_RUNNER_TOKEN}" \
+            --executor docker \
+            --docker-image docker:24-git \
+            --docker-volumes /var/run/docker.sock:/var/run/docker.sock \
+            --description docker-runner-1
+        fi
+        exec /usr/bin/dumb-init /entrypoint run
