@@ -40,7 +40,10 @@ Roadmap по AI-агентам — в [docs/ai-agents-roadmap.md](docs/ai-agents
 
 Требования: свежий сервер Ubuntu/Debian, **минимум 8GB RAM только под
 GitLab** (см. таблицу ресурсов ниже), домен на Hetzner DNS с API-токеном
-(`HETZNER_API_KEY` в `.env`) и DNS, указывающий на сервер — проще всего
+из **унифицированной Hetzner Console** (`console.hetzner.com` → Security →
+API Tokens — не старая `dns.hetzner.com`, токены оттуда не подходят к
+зонам, созданным после переезда DNS в 2026) в `.env` как `HETZNER_API_TOKEN`,
+и DNS, указывающий на сервер — проще всего
 wildcard `*.${BASE_DOMAIN}`, иначе A-записи на каждый поддомен:
 
 `git`, `registry`, `sso`, `traefik`, `grafana`, `prometheus`, `alerts`,
@@ -51,7 +54,7 @@ wildcard `*.${BASE_DOMAIN}`, иначе A-записи на каждый под�
 
 Сертификаты выпускаются через DNS-01 challenge (TXT-запись), поэтому порт 80
 открывать не нужно вообще, а на всю платформу выдаётся один wildcard-сертификат.
-Без `HETZNER_API_KEY` установка остановится с ошибкой — Let's Encrypt не
+Без `HETZNER_API_TOKEN` установка остановится с ошибкой — Let's Encrypt не
 сможет подтвердить домен.
 
 Один файл на сервере — ставит Docker (если его нет), настраивает sysctl,

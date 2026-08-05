@@ -170,8 +170,8 @@ problems=()
 
 # Сертификаты выпускаются через DNS-01 у Hetzner: без токена Traefik не
 # получит ни одного сертификата.
-if [ -z "${HETZNER_API_KEY:-}" ]; then
-  problems+=("HETZNER_API_KEY — токен из dns.hetzner.com -> API tokens (без него не будет сертификатов)")
+if [ -z "${HETZNER_API_TOKEN:-}" ]; then
+  problems+=("HETZNER_API_TOKEN — токен из console.hetzner.com -> Security -> API Tokens (НЕ старая dns.hetzner.com — без него не будет сертификатов)")
 fi
 
 # Платформа слушает только интерфейс NetBird (wt0) — он появляется после
