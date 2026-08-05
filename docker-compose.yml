@@ -119,6 +119,12 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # In `start` (production) mode, --proxy-headers alone isn't enough —
+      # Keycloak 25 still requires HTTPS key material and refuses to boot
+      # without this, crash-looping with "Key material not provided to
+      # setup HTTPS" forever. Traefik already terminates TLS, so plain HTTP
+      # to this container is fine.
+      KC_HTTP_ENABLED: "true"
     depends_on:
       - keycloak-db
     networks:
