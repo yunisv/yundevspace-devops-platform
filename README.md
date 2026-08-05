@@ -38,16 +38,18 @@ Roadmap по AI-агентам — в [docs/ai-agents-roadmap.md](docs/ai-agents
 
 ## Быстрый старт
 
-Требования: свежий сервер Ubuntu/Debian, открытые 80/443/2222 порты,
-**минимум 8GB RAM только под GitLab** (см. таблицу ресурсов ниже), и DNS,
-указывающий на сервер — либо wildcard `*.${BASE_DOMAIN}`, либо A-записи на
-каждый поддомен:
+Требования: свежий сервер Ubuntu/Debian, **минимум 8GB RAM только под
+GitLab** (см. таблицу ресурсов ниже), домен на Hetzner DNS с API-токеном
+(`HETZNER_API_KEY` в `.env`) и DNS, указывающий на сервер — проще всего
+wildcard `*.${BASE_DOMAIN}`, иначе A-записи на каждый поддомен:
 
 `git`, `registry`, `sso`, `traefik`, `grafana`, `prometheus`, `alerts`,
-`automation`, `dash` (+ `pm` и `dojo`, если ставите Plane/DefectDojo).
+`automation`, `dash`, `netbird` (+ `pm` и `dojo`, если ставите Plane/DefectDojo).
 
-Без корректного DNS Let's Encrypt не выдаст сертификаты — HTTP-01 challenge
-требует, чтобы домен уже резолвился на этот сервер.
+Сертификаты выпускаются через DNS-01 challenge (TXT-запись), поэтому порт 80
+открывать не нужно вообще, а на всю платформу выдаётся один wildcard-сертификат.
+Без `HETZNER_API_KEY` установка остановится с ошибкой — Let's Encrypt не
+сможет подтвердить домен.
 
 Один файл на сервере — ставит Docker (если его нет), настраивает sysctl,
 сеть, генерирует случайные секреты в `.env`, поднимает выбранные слои:
@@ -80,6 +82,19 @@ sudo ./scripts/install.sh                       # gitlab + мониторинг 
 5. `https://automation.${BASE_DOMAIN}` — **сразу создать owner-аккаунт** (n8n убрал basic-auth в версии 1.0, доступ закрывает только собственный аккаунт — пока он не создан, занять его может любой, кто откроет адрес), затем настроить workflow'ы под вебхуки GitLab/Plane/DefectDojo/Alertmanager.
 6. Стартовая страница `https://dash.${BASE_DOMAIN}` со всеми сервисами — поднимается отдельно, после настройки realm/клиента в Keycloak: [docs/dashboard-sso.md](docs/dashboard-sso.md), затем `./scripts/up.sh dashboard`.
 7. Plane ставится отдельно по [docs/adding-plane.md](docs/adding-plane.md) — там же настройка GitLab-интеграции и вебхуков в n8n.
+8. **Закрыть сервер наружу**: поставить VPN и заблокировать порты — [docs/vpn-netbird.md](docs/vpn-netbird.md), затем `sudo ./scripts/harden.sh`. Делать это только после того, как VPN проверен: скрипт закрывает SSH.
+
+## Доступ и сетевая безопасность
+
+Платформа рассчитана на закрытый контур: сервисы не отдаются в интернет, к
+серверу не обращаются по IP. Наружу открыто только то, без чего нельзя
+войти в VPN — 443 (там публично отвечают лишь `sso.` и `netbird.`, остальные
+хосты закрыты ip-фильтром Traefik) и порты STUN/TURN NetBird. SSH, HTTP и
+git-по-SSH доступны только из VPN. Доступ выдаётся и отзывается в Keycloak:
+отключили аккаунт — человек потерял и VPN, и всю платформу.
+
+Подробности, порядок установки и способ восстановления, если заперлись
+снаружи, — в [docs/vpn-netbird.md](docs/vpn-netbird.md).
 
 ## Ресурсы сервера
 

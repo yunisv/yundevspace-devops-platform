@@ -20,12 +20,15 @@ services:
       - --providers.docker.exposedbydefault=false
       - --providers.file.directory=/etc/traefik/dynamic
       - --providers.file.watch=true
-      - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.le.acme.storage=/acme/acme.json
-      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      # DNS-01, not HTTP-01: proves domain ownership via a TXT record, so
+      # port 80 doesn't have to be open to the internet at all. It's also the
+      # only challenge type that can issue the wildcard cert configured in
+      # config/traefik/dynamic/tls.yml.
+      - --certificatesresolvers.le.acme.dnschallenge=true
+      - --certificatesresolvers.le.acme.dnschallenge.provider=hetzner
       - --api.dashboard=true
       # Prometheus scrapes this (see config/prometheus/prometheus.yml). Without
       # these flags there is nothing listening for metrics at all.
@@ -35,13 +38,18 @@ services:
       # Applies the headers middleware from config/traefik/dynamic.yml to every
       # router on this entrypoint, instead of leaving it defined but unused.
       - --entrypoints.websecure.http.middlewares=security-headers@file
+    environment:
+      # Hetzner DNS API token for the DNS-01 challenge above. Traefik v3.1
+      # bundles lego v4.17, which reads HETZNER_API_KEY; lego v4.27+ renamed
+      # it to HETZNER_API_TOKEN, so check this if you bump the Traefik image.
+      HETZNER_API_KEY: ${HETZNER_API_KEY}
     ports:
-      - "80:80"
+      # No :80 — nothing needs it now that ACME uses DNS-01.
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-acme:/acme
-      - ./config/traefik/dynamic.yml:/etc/traefik/dynamic/dynamic.yml:ro
+      - ./config/traefik/dynamic:/etc/traefik/dynamic:ro
       - ./secrets/dashboard.htpasswd:/etc/traefik/dashboard.htpasswd:ro
     networks:
       - edge
@@ -51,7 +59,7 @@ services:
       - traefik.http.routers.traefik.entrypoints=websecure
       - traefik.http.routers.traefik.tls.certresolver=le
       - traefik.http.routers.traefik.service=api@internal
-      - traefik.http.routers.traefik.middlewares=dashboard-auth
+      - traefik.http.routers.traefik.middlewares=internal-only@file,dashboard-auth
       - traefik.http.middlewares.dashboard-auth.basicauth.usersfile=/etc/traefik/dashboard.htpasswd
       - homepage.group=Platform
       - homepage.name=Traefik
@@ -91,6 +99,8 @@ services:
       - edge
     labels:
       - traefik.enable=true
+      # Deliberately NOT internal-only: users authenticate here to get onto
+      # the VPN, so it has to stay reachable from the internet.
       - traefik.http.routers.keycloak.rule=Host(`sso.${BASE_DOMAIN}`)
       - traefik.http.routers.keycloak.entrypoints=websecure
       - traefik.http.routers.keycloak.tls.certresolver=le

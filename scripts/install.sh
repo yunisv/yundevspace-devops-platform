@@ -96,14 +96,15 @@ else
   echo "Создана"
 fi
 
-# --- 6. Firewall (ufw), если используется ----------------------------------
-if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
-  log "ufw активен — открываю 80/443 (http/https) и 2222 (git ssh)"
-  ufw allow 80/tcp >/dev/null
+# --- 6. Firewall -----------------------------------------------------------
+# Порты намеренно НЕ открываются здесь: цель — закрытый наружу сервер с
+# доступом через VPN. Ограничения накатываются отдельно ./scripts/harden.sh,
+# уже после того как VPN поднят и проверен (иначе легко запереть себя).
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+  log "ufw активен — проверяю, что 443 открыт (нужен для выдачи доступа в VPN)"
   ufw allow 443/tcp >/dev/null
-  ufw allow 2222/tcp >/dev/null
 else
-  warn "ufw не активен/не установлен — откройте 80, 443, 2222 своим фаерволом вручную, если он есть."
+  warn "ufw не активен. Итоговую блокировку портов накатите ./scripts/harden.sh после установки VPN (docs/vpn-netbird.md)."
 fi
 
 # --- 7. .env + секреты ------------------------------------------------------
@@ -151,6 +152,23 @@ fi
 # shellcheck disable=SC1091
 source .env
 
+# Сертификаты выпускаются через DNS-01 у Hetzner — без токена Traefik не
+# получит ни одного сертификата, и это лучше поймать здесь, а не в логах.
+if [ -z "${HETZNER_API_KEY:-}" ]; then
+  echo "HETZNER_API_KEY не заполнен в .env." >&2
+  echo "Создайте токен в dns.hetzner.com -> API tokens и впишите его — без этого" >&2
+  echo "Let's Encrypt не выдаст сертификаты (challenge идёт через DNS, а не порт 80)." >&2
+  exit 1
+fi
+
+# Traefik-овский file provider не умеет переменные, поэтому wildcard-конфиг
+# рендерим из шаблона с подставленным доменом.
+if [ ! -f config/traefik/dynamic/tls.yml ]; then
+  log "Генерирую config/traefik/dynamic/tls.yml (wildcard-сертификат)"
+  sed "s#__BASE_DOMAIN__#${BASE_DOMAIN}#g" \
+    config/traefik/dynamic/tls.yml.template > config/traefik/dynamic/tls.yml
+fi
+
 # Traefik dashboard basic-auth — отдельным файлом (htpasswd), не через .env:
 # передача hash-а через переменную окружения ломается на `$`-экранировании
 # при подстановке docker compose (проверено на практике).
@@ -186,6 +204,9 @@ cat <<EOF
   4. https://sso.${BASE_DOMAIN} — создать realm и клиент для oauth2-proxy,
      затем поднять стартовую страницу со всеми сервисами:
      ./scripts/up.sh dashboard        (инструкция: docs/dashboard-sso.md)
-  5. Plane / DefectDojo / Harbor ставятся отдельно официальными установщиками —
+  5. VPN: поставить NetBird (docs/vpn-netbird.md), проверить доступ, и только
+     ПОСЛЕ этого закрыть сервер наружу:
+     sudo ./scripts/harden.sh
+  6. Plane / DefectDojo / Harbor ставятся отдельно официальными установщиками —
      см. docs/adding-plane.md и docs/adding-defectdojo-harbor.md.
 EOF
