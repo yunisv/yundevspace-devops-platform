@@ -1,0 +1,21 @@
+title: DevOps Platform
+theme: dark
+color: slate
+headerStyle: clean
+hideVersion: true
+
+# Group order/layout. Group names must match the `homepage.group` labels on
+# the services (see docker-compose.*.yml) and the groups in services.yaml.
+layout:
+  Development:
+    style: row
+    columns: 3
+  Observability:
+    style: row
+    columns: 4
+  Automation:
+    style: row
+    columns: 2
+  Platform:
+    style: row
+    columns: 2

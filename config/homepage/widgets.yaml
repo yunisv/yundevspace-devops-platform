@@ -1,0 +1,11 @@
+# Header widgets (host resources, search). Service-specific widgets live
+# next to their service entry instead — see services.yaml.
+- resources:
+    cpu: true
+    memory: true
+    disk: /
+    expanded: true
+
+- search:
+    provider: duckduckgo
+    target: _blank

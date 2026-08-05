@@ -1,0 +1,13 @@
+- Документация:
+    - Архитектура платформы:
+        - abbr: АР
+          href: https://git.{{HOMEPAGE_VAR_BASE_DOMAIN}}
+          description: docs/architecture.md в репозитории платформы
+
+- Внешние:
+    - GitLab Docs:
+        - abbr: GL
+          href: https://docs.gitlab.com/
+    - Homepage Docs:
+        - abbr: HP
+          href: https://gethomepage.dev/

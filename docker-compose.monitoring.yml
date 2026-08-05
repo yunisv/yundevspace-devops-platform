@@ -27,6 +27,11 @@ services:
       - traefik.http.routers.prometheus.entrypoints=websecure
       - traefik.http.routers.prometheus.tls.certresolver=le
       - traefik.http.services.prometheus.loadbalancer.server.port=9090
+      - homepage.group=Observability
+      - homepage.name=Prometheus
+      - homepage.icon=prometheus.png
+      - homepage.href=https://prometheus.${BASE_DOMAIN}
+      - homepage.description=Метрики и правила алертов
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
@@ -42,6 +47,11 @@ services:
       - traefik.http.routers.alertmanager.entrypoints=websecure
       - traefik.http.routers.alertmanager.tls.certresolver=le
       - traefik.http.services.alertmanager.loadbalancer.server.port=9093
+      - homepage.group=Observability
+      - homepage.name=Alertmanager
+      - homepage.icon=alertmanager.png
+      - homepage.href=https://alerts.${BASE_DOMAIN}
+      - homepage.description=Маршрутизация алертов
 
   node-exporter:
     image: prom/node-exporter:v1.8.2
@@ -113,3 +123,8 @@ services:
       - traefik.http.routers.grafana.entrypoints=websecure
       - traefik.http.routers.grafana.tls.certresolver=le
       - traefik.http.services.grafana.loadbalancer.server.port=3000
+      - homepage.group=Observability
+      - homepage.name=Grafana
+      - homepage.icon=grafana.png
+      - homepage.href=https://grafana.${BASE_DOMAIN}
+      - homepage.description=Дашборды метрик и логов

@@ -15,6 +15,7 @@ flowchart TB
     end
 
     plane["Plane<br/>(issue tracking / PM)"]
+    dash["Homepage<br/>(стартовая страница, за oauth2-proxy)"]
 
     subgraph quality["Управление уязвимостями"]
         dojo["DefectDojo (агрегатор находок)"]
@@ -50,6 +51,11 @@ flowchart TB
     keycloak -.SSO.- gitlab
     keycloak -.SSO.- graf
     keycloak -.SSO.- n8n
+    keycloak -.SSO.- dash
+    dev -->|одна точка входа| dash
+    dash -.->|auto-discovery<br/>docker-лейблов| gitlab
+    dash -.-> graf
+    dash -.-> n8n
 ```
 
 ## Зачем именно этот набор
@@ -71,6 +77,7 @@ flowchart TB
 | Registry с расширенным сканированием | Harbor (опционально) | если штатного GitLab Container Registry + Trivy окажется мало | см. `adding-defectdojo-harbor.md` |
 | Мониторинг | Prometheus/Grafana/Loki/Alertmanager | метрики, логи, алерты | стандарт де-факто, огромная экосистема экспортеров, GitLab отдаёт метрики в формате Prometheus "из коробки" |
 | Автоматизация | n8n | склейка вебхуков между всеми инструментами, площадка для будущих AI-агентов | low-code, не пишем интеграционный код руками |
+| Стартовая страница | Homepage + oauth2-proxy | одна точка входа во все сервисы, плитки со статусами, за Keycloak-логином | собирает сервисы сама из docker-лейблов, ~50MB RAM; свой аналог на Next.js пришлось бы поддерживать и самим закрывать хранение API-токенов (см. `dashboard-sso.md`) |
 
 ## Пример пайплайна GitLab CI с публикацией в DefectDojo
 

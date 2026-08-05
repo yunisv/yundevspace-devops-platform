@@ -20,6 +20,12 @@ VCS + CI/CD + registry + SAST (через GitLab CE), управление за�
 | VCS + CI/CD + Issues + Registry + SAST | `docker-compose.gitlab.yml` | GitLab CE, GitLab Runner |
 | Мониторинг | `docker-compose.monitoring.yml` | Prometheus, Grafana, Loki, Promtail, Alertmanager, node-exporter, cAdvisor |
 | Автоматизация / AI-агенты | `docker-compose.automation.yml` | n8n |
+| Стартовая страница + SSO | `docker-compose.dashboard.yml` | Homepage, oauth2-proxy |
+
+Стартовая страница (`dash.`) собирает плитки сервисов **автоматически** из
+docker-лейблов `homepage.*` — добавили сервис в стек, он появился на
+странице. Подробности и настройка SSO — в
+[docs/dashboard-sso.md](docs/dashboard-sso.md).
 
 Plane (issue tracking/PM), DefectDojo (агрегация находок SAST/DAST/SCA) и
 Harbor (registry с расширенным сканированием, если GitLab-registry+Trivy
@@ -38,7 +44,7 @@ Roadmap по AI-агентам — в [docs/ai-agents-roadmap.md](docs/ai-agents
 каждый поддомен:
 
 `git`, `registry`, `sso`, `traefik`, `grafana`, `prometheus`, `alerts`,
-`automation` (+ `pm` и `dojo`, если ставите Plane/DefectDojo).
+`automation`, `dash` (+ `pm` и `dojo`, если ставите Plane/DefectDojo).
 
 Без корректного DNS Let's Encrypt не выдаст сертификаты — HTTP-01 challenge
 требует, чтобы домен уже резолвился на этот сервер.
@@ -72,7 +78,8 @@ sudo ./scripts/install.sh                       # gitlab + мониторинг 
 3. Admin Area → CI/CD → Runners → New instance runner — скопировать токен, прописать в `.env` как `GITLAB_RUNNER_TOKEN`, поднять раннер (он в профиле `runner`, поэтому сам не стартует): `docker compose -f docker-compose.yml -f docker-compose.gitlab.yml --profile runner up -d`
 4. `https://grafana.${BASE_DOMAIN}` — датасорсы Prometheus/Loki уже прописаны автоматически.
 5. `https://automation.${BASE_DOMAIN}` — **сразу создать owner-аккаунт** (n8n убрал basic-auth в версии 1.0, доступ закрывает только собственный аккаунт — пока он не создан, занять его может любой, кто откроет адрес), затем настроить workflow'ы под вебхуки GitLab/Plane/DefectDojo/Alertmanager.
-6. Plane ставится отдельно по [docs/adding-plane.md](docs/adding-plane.md) — там же настройка GitLab-интеграции и вебхуков в n8n.
+6. Стартовая страница `https://dash.${BASE_DOMAIN}` со всеми сервисами — поднимается отдельно, после настройки realm/клиента в Keycloak: [docs/dashboard-sso.md](docs/dashboard-sso.md), затем `./scripts/up.sh dashboard`.
+7. Plane ставится отдельно по [docs/adding-plane.md](docs/adding-plane.md) — там же настройка GitLab-интеграции и вебхуков в n8n.
 
 ## Ресурсы сервера
 
