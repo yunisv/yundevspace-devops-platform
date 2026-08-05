@@ -10,9 +10,15 @@ beat-worker, live, встроенный Caddy-прокси), собираемы�
 
 ## Установка
 
+Репозиторий Plane пересобрали (`deploy/` стал `deployments/` с несколькими
+методами — cli/aio/kubernetes/swarm), установщик теперь раздаётся через
+GitHub Releases, а не сырым файлом из дерева репозитория — если увидите
+`curl: (22) ... 404` на старый путь `deploy/selfhost/install.sh`, вот
+актуальный:
+
 ```bash
 mkdir -p /opt/plane && cd /opt/plane
-curl -fsSL -o setup.sh https://raw.githubusercontent.com/makeplane/plane/master/deploy/selfhost/install.sh
+curl -fsSL -o setup.sh https://github.com/makeplane/plane/releases/latest/download/setup.sh
 chmod +x setup.sh
 ./setup.sh
 # Меню: 1) Install — создаёт папку plane-app/ с docker-compose.yaml и plane.env
@@ -36,8 +42,10 @@ Traefik, поэтому порты наружу не пробрасываем, �
 ```yaml
 services:
   proxy:
-    # удалить блок `ports: ["80:80"]` (или что там сгенерировано) —
-    # наружу это будет отдавать Traefik, а не сам Plane
+    # Удалить весь блок `ports:` целиком — в актуальной версии он выглядит
+    # как long-syntax с target/published/mode: host (через LISTEN_HTTP_PORT/
+    # LISTEN_HTTPS_PORT), а не простой `["80:80"]", но смысл тот же: наружу
+    # это будет отдавать Traefik, а не сам Plane.
     networks:
       - default
       - edge
