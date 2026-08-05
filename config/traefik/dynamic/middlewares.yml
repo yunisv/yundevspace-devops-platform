@@ -1,0 +1,22 @@
+# Static dynamic-config. Traefik's file provider does NOT expand environment
+# variables, so anything domain-specific is generated into tls.yml by
+# ./scripts/install.sh instead of living here.
+http:
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+
+    # Attached to every router that must not be reachable from the internet.
+    # 100.64.0.0/10 is the CGNAT range NetBird assigns to VPN peers;
+    # 172.16.0.0/12 covers Docker's bridge networks so services can still
+    # reach each other through Traefik. Adjust if you change NetBird's network.
+    internal-only:
+      ipAllowList:
+        sourceRange:
+          - 100.64.0.0/10
+          - 172.16.0.0/12
+          - 127.0.0.1/32
