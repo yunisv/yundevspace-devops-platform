@@ -54,13 +54,11 @@ services:
       # Two routers on one container, so each needs its service named explicitly.
       - traefik.http.routers.gitlab.rule=Host(`git.${BASE_DOMAIN}`)
       - traefik.http.routers.gitlab.entrypoints=websecure
-      - traefik.http.routers.gitlab.tls.certresolver=le
       - traefik.http.routers.gitlab.service=gitlab
       - traefik.http.routers.gitlab.middlewares=internal-only@file
       - traefik.http.services.gitlab.loadbalancer.server.port=80
       - traefik.http.routers.gitlab-registry.rule=Host(`registry.${BASE_DOMAIN}`)
       - traefik.http.routers.gitlab-registry.entrypoints=websecure
-      - traefik.http.routers.gitlab-registry.tls.certresolver=le
       - traefik.http.routers.gitlab-registry.service=gitlab-registry
       - traefik.http.routers.gitlab-registry.middlewares=internal-only@file
       - traefik.http.services.gitlab-registry.loadbalancer.server.port=5050

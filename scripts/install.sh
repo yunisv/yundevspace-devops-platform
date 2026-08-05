@@ -34,6 +34,16 @@ done
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[1;33mWARN: %s\033[0m\n' "$1" >&2; }
 
+# IPv4-адреса этой машины, по одному в строке. iproute2 ставится ниже, но
+# на минимальных образах его может не быть в момент первого запуска.
+host_addrs() {
+  if command -v ip >/dev/null 2>&1; then
+    ip -4 -o addr show 2>/dev/null | awk '{split($4,a,"/"); print a[1] "\t(" $2 ")"}'
+  else
+    hostname -I 2>/dev/null | tr ' ' '\n' | grep -v '^$' || true
+  fi
+}
+
 if [ "$(id -u)" -ne 0 ]; then
   echo "Запускать от root (sudo ./scripts/install.sh) — нужно ставить пакеты и sysctl." >&2
   exit 1
@@ -56,9 +66,10 @@ case "${ID:-}" in
 esac
 
 # --- 2. Base packages -----------------------------------------------------
-log "Базовые пакеты (curl, openssl, apache2-utils)"
+log "Базовые пакеты (curl, openssl, apache2-utils, iproute2)"
 apt-get update -y
-apt-get install -y --no-install-recommends curl ca-certificates openssl apache2-utils
+apt-get install -y --no-install-recommends \
+  curl ca-certificates openssl apache2-utils iproute2
 
 # --- 3. Docker + Compose plugin -------------------------------------------
 log "Проверка Docker"
@@ -150,33 +161,63 @@ fi
 # shellcheck disable=SC1091
 source .env
 
-# Сертификаты выпускаются через DNS-01 у Hetzner — без токена Traefik не
-# получит ни одного сертификата, и это лучше поймать здесь, а не в логах.
+# Значения, которые нельзя угадать за пользователя. Собираем все проблемы
+# разом и печатаем одним списком — иначе получается «поправил, запустил,
+# упало на следующем» по кругу.
+problems=()
+
+# Сертификаты выпускаются через DNS-01 у Hetzner: без токена Traefik не
+# получит ни одного сертификата.
 if [ -z "${HETZNER_API_KEY:-}" ]; then
-  echo "HETZNER_API_KEY не заполнен в .env." >&2
-  echo "Создайте токен в dns.hetzner.com -> API tokens и впишите его — без этого" >&2
-  echo "Let's Encrypt не выдаст сертификаты (challenge идёт через DNS, а не порт 80)." >&2
+  problems+=("HETZNER_API_KEY — токен из dns.hetzner.com -> API tokens (без него не будет сертификатов)")
+fi
+
+# Платформа слушает только приватный интерфейс. -F, потому что точки в IP
+# иначе трактуются как любой символ.
+if [ -z "${BIND_ADDRESS:-}" ] || ! host_addrs | grep -qFw "${BIND_ADDRESS}"; then
+  problems+=("BIND_ADDRESS=${BIND_ADDRESS:-<пусто>} — такого адреса нет на этой машине")
+fi
+
+if [ ${#problems[@]} -gt 0 ]; then
+  echo >&2
+  echo "Заполните в .env перед установкой:" >&2
+  for p in "${problems[@]}"; do echo "  - $p" >&2; done
+  echo >&2
+  echo "Адреса этой машины:" >&2
+  host_addrs | sed 's/^/  /' >&2
+  echo >&2
+  echo "Затем запустите ./scripts/install.sh снова (уже созданный .env не перезапишется)." >&2
   exit 1
 fi
 
-# Платформа слушает только приватный интерфейс — проверяем, что указанный
-# адрес на этой машине действительно есть, иначе docker молча не поднимется
-# или, хуже, забиндится не туда.
-if ! ip -4 addr show 2>/dev/null | grep -qw "${BIND_ADDRESS}"; then
-  echo "BIND_ADDRESS=${BIND_ADDRESS} не найден среди адресов этой машины." >&2
-  echo "Укажите приватный IP сервера в сети Hetzner. Доступные адреса:" >&2
-  ip -4 -o addr show 2>/dev/null | awk '{print "  " $2 " " $4}' >&2
-  exit 1
+# Эти три подсети определяют, кого пустит ip-фильтр. Ошибка здесь не ломает
+# установку, но потом даёт 403 на ровном месте — поэтому показываем явно.
+log "Сетевые параметры (проверьте, что совпадают с реальностью)"
+cat <<EOF
+  Приватный IP сервера : ${BIND_ADDRESS}
+  Подсеть VPN-клиентов : ${VPN_SUBNET}
+  Приватная сеть       : ${PRIVATE_SUBNET}
+  Сеть контейнеров     : ${DOCKER_SUBNET}
+EOF
+
+# Подсеть docker-сети закреплена в compose. Если сеть уже существует с
+# другой — compose откажется стартовать с невнятной ошибкой.
+if docker network inspect devops_edge >/dev/null 2>&1; then
+  existing_subnet="$(docker network inspect devops_edge \
+    --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true)"
+  if [ -n "$existing_subnet" ] && [ "$existing_subnet" != "${DOCKER_SUBNET}" ]; then
+    echo >&2
+    echo "Сеть devops_edge уже существует с подсетью ${existing_subnet}," >&2
+    echo "а в .env указана ${DOCKER_SUBNET}. Совместите их: либо впишите" >&2
+    echo "${existing_subnet} в DOCKER_SUBNET, либо пересоздайте сеть:" >&2
+    echo "  docker compose down && docker network rm devops_edge" >&2
+    exit 1
+  fi
 fi
 
-# Traefik-овский file provider не умеет переменные, поэтому доменные и
-# сетевые куски конфига рендерим из шаблонов.
-if [ ! -f config/traefik/dynamic/tls.yml ]; then
-  log "Генерирую config/traefik/dynamic/tls.yml (wildcard-сертификат)"
-  sed "s#__BASE_DOMAIN__#${BASE_DOMAIN}#g" \
-    config/traefik/dynamic/tls.yml.template > config/traefik/dynamic/tls.yml
-fi
-
+# Traefik-овский file provider не умеет переменные, поэтому подсети для
+# ip-фильтра рендерим из шаблона. (Wildcard-сертификат задаётся флагами
+# entrypoint в docker-compose.yml — там подстановка работает.)
 if [ ! -f config/traefik/dynamic/access.yml ]; then
   log "Генерирую config/traefik/dynamic/access.yml (разрешённые подсети)"
   sed -e "s#__VPN_SUBNET__#${VPN_SUBNET}#g" \
@@ -191,7 +232,15 @@ fi
 if [ ! -f secrets/dashboard.htpasswd ]; then
   log "Генерирую пароль для Traefik dashboard"
   dash_pass="$(openssl rand -base64 18)"
-  htpasswd -Bbn admin "$dash_pass" > secrets/dashboard.htpasswd
+  if command -v htpasswd >/dev/null 2>&1; then
+    htpasswd -Bbn admin "$dash_pass" > secrets/dashboard.htpasswd
+  else
+    # apache2-utils не поставился — apr1 через openssl. Traefik понимает
+    # оба формата, bcrypt из htpasswd просто предпочтительнее.
+    warn "htpasswd не найден, использую openssl (apr1 вместо bcrypt)."
+    printf 'admin:%s\n' "$(openssl passwd -apr1 "$dash_pass")" > secrets/dashboard.htpasswd
+  fi
+  chmod 600 secrets/dashboard.htpasswd
   echo "Traefik dashboard (https://traefik.${BASE_DOMAIN:-<домен>}): admin / ${dash_pass}"
   echo "^ сохраните этот пароль — он больше нигде не выводится и не хранится в открытом виде."
 else
@@ -206,8 +255,9 @@ chmod +x scripts/up.sh
 log "Готово"
 cat <<EOF
 
-Проверьте, что DNS указывает на этот сервер (A-записи или wildcard *.${BASE_DOMAIN}):
-  git, registry, sso, traefik, grafana, prometheus, alerts, automation
+DNS: поддомены должны резолвиться в ПРИВАТНЫЙ адрес ${BIND_ADDRESS}
+(проще всего wildcard *.${BASE_DOMAIN} A ${BIND_ADDRESS}). Нужны:
+  git, registry, sso, traefik, grafana, prometheus, alerts, automation, dash
 
 Дальше руками (подробности в README.md):
   1. https://git.${BASE_DOMAIN} — войти как root, пароль в .env (GITLAB_ROOT_PASSWORD).

@@ -6,6 +6,5 @@ secrets/*
 # OS
 .DS_Store
 
-# Rendered from tls.yml.template by install.sh (contains the real domain)
-config/traefik/dynamic/tls.yml
+# Rendered from access.yml.template by install.sh (contains the real subnets)
 config/traefik/dynamic/access.yml
