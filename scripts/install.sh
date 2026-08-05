@@ -138,6 +138,11 @@ if [ ! -f .env ]; then
     fi
   done < .env.example
 
+  # oauth2-proxy требует cookie secret ровно 16/24/32 байта в base64 —
+  # обычный hex-секрет тут не подойдёт.
+  cookie_secret="$(openssl rand -base64 32 | tr -- '+/' '-_')"
+  sed -i "s#^OAUTH2_PROXY_COOKIE_SECRET=.*#OAUTH2_PROXY_COOKIE_SECRET=${cookie_secret}#" .env
+
   echo "Секреты сгенерированы в .env. Сохраните файл в надёжном месте (или подключите Vault позже)."
 else
   echo ".env уже существует — не трогаю (удалите файл, если хотите пересоздать с нуля)."
@@ -178,7 +183,9 @@ cat <<EOF
      docker compose -f docker-compose.yml -f docker-compose.gitlab.yml --profile runner up -d
   3. https://automation.${BASE_DOMAIN} — сразу создать owner-аккаунт в n8n
      (до этого момента любой, кто откроет адрес, может занять его первым).
-  4. https://sso.${BASE_DOMAIN} — создать realm/клиентов в Keycloak.
+  4. https://sso.${BASE_DOMAIN} — создать realm и клиент для oauth2-proxy,
+     затем поднять стартовую страницу со всеми сервисами:
+     ./scripts/up.sh dashboard        (инструкция: docs/dashboard-sso.md)
   5. Plane / DefectDojo / Harbor ставятся отдельно официальными установщиками —
      см. docs/adding-plane.md и docs/adding-defectdojo-harbor.md.
 EOF

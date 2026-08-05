@@ -1,0 +1,80 @@
+# Start page: Homepage (service switcher with live status widgets) behind
+# Keycloak SSO via oauth2-proxy.
+#
+# NOT part of the default install: oauth2-proxy needs a Keycloak realm and
+# client that only exist after you configure Keycloak. Bring this layer up
+# once that's done — see docs/dashboard-sso.md.
+#
+# oauth2-proxy is used rather than thomseddon/traefik-forward-auth, which
+# has had no commits since 2021.
+
+networks:
+  edge:
+    external: true
+    name: devops_edge
+
+volumes:
+  homepage-logs:
+
+services:
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    restart: unless-stopped
+    environment:
+      OAUTH2_PROXY_PROVIDER: keycloak-oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: https://sso.${BASE_DOMAIN}/realms/${KEYCLOAK_REALM}
+      OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET}
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      # Sits behind Traefik, so it must trust the forwarded headers.
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      # Cookie shared across the platform's subdomains, so the same login
+      # can protect other services with the `sso` middleware below.
+      OAUTH2_PROXY_COOKIE_DOMAINS: ".${BASE_DOMAIN}"
+      OAUTH2_PROXY_WHITELIST_DOMAINS: ".${BASE_DOMAIN}"
+      # Authorization is delegated to Keycloak: anyone the realm lets in is
+      # allowed. Restrict per-service in Keycloak (roles/groups) if needed.
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+    networks:
+      - edge
+    labels:
+      - traefik.enable=true
+      # Handles the OIDC redirect/callback on the dashboard's own hostname.
+      - traefik.http.routers.oauth2-proxy.rule=Host(`dash.${BASE_DOMAIN}`) && PathPrefix(`/oauth2/`)
+      - traefik.http.routers.oauth2-proxy.entrypoints=websecure
+      - traefik.http.routers.oauth2-proxy.tls.certresolver=le
+      - traefik.http.services.oauth2-proxy.loadbalancer.server.port=4180
+      # Reusable middleware — attach `sso@docker` to any router that should
+      # sit behind Keycloak login.
+      - traefik.http.middlewares.sso.forwardauth.address=http://oauth2-proxy:4180/oauth2/auth
+      - traefik.http.middlewares.sso.forwardauth.trustForwardHeader=true
+      - traefik.http.middlewares.sso.forwardauth.authResponseHeaders=X-Auth-Request-User,X-Auth-Request-Email
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:v0.10.9
+    restart: unless-stopped
+    environment:
+      # Homepage rejects requests whose Host header isn't listed here.
+      HOMEPAGE_ALLOWED_HOSTS: dash.${BASE_DOMAIN}
+      # HOMEPAGE_VAR_* values are substituted into the YAML configs as
+      # {{HOMEPAGE_VAR_NAME}}, which keeps API tokens out of the repo.
+      HOMEPAGE_VAR_BASE_DOMAIN: ${BASE_DOMAIN}
+    volumes:
+      - ./config/homepage:/app/config
+      - homepage-logs:/app/config/logs
+      # Read-only socket for service auto-discovery from docker labels. It
+      # still exposes the full Docker API for reads — swap in a
+      # docker-socket-proxy if that's more access than you want to grant.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.homepage.rule=Host(`dash.${BASE_DOMAIN}`)
+      - traefik.http.routers.homepage.entrypoints=websecure
+      - traefik.http.routers.homepage.tls.certresolver=le
+      - traefik.http.routers.homepage.middlewares=sso@docker
+      - traefik.http.services.homepage.loadbalancer.server.port=3000

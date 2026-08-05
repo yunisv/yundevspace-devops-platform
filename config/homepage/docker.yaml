@@ -1,0 +1,5 @@
+# Enables service auto-discovery: any container carrying `homepage.*` labels
+# on this socket shows up on the dashboard automatically, so adding a service
+# to the stack doesn't mean editing services.yaml by hand.
+local:
+  socket: /var/run/docker.sock

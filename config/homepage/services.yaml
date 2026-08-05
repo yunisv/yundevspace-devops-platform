@@ -1,0 +1,30 @@
+# Services that live in this stack are discovered automatically from their
+# docker labels (see config/homepage/docker.yaml) — nothing to add here.
+#
+# This file is for the add-ons installed by their own official installers
+# (Plane, DefectDojo, Harbor), which we don't control the labels of.
+# Uncomment the ones you've actually installed.
+
+# - Development:
+#     - Plane:
+#         href: https://pm.{{HOMEPAGE_VAR_BASE_DOMAIN}}
+#         description: Задачи, спринты, roadmap
+#         icon: plane.png
+#
+#     - DefectDojo:
+#         href: https://dojo.{{HOMEPAGE_VAR_BASE_DOMAIN}}
+#         description: Находки SAST/DAST/SCA
+#         icon: defectdojo.png
+
+# Widgets pull live data and need an API token each. Create the token in the
+# service, put it in .env, and reference it as {{HOMEPAGE_VAR_...}} — tokens
+# stay server-side and are never sent to the browser. Example:
+#
+# - Development:
+#     - GitLab:
+#         href: https://git.{{HOMEPAGE_VAR_BASE_DOMAIN}}
+#         icon: gitlab.png
+#         widget:
+#           type: gitlab
+#           url: https://git.{{HOMEPAGE_VAR_BASE_DOMAIN}}
+#           key: {{HOMEPAGE_VAR_GITLAB_TOKEN}}

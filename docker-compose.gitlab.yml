@@ -61,6 +61,12 @@ services:
       - traefik.http.routers.gitlab-registry.tls.certresolver=le
       - traefik.http.routers.gitlab-registry.service=gitlab-registry
       - traefik.http.services.gitlab-registry.loadbalancer.server.port=5050
+      # Picked up by the Homepage dashboard (docker-compose.dashboard.yml).
+      - homepage.group=Development
+      - homepage.name=GitLab
+      - homepage.icon=gitlab.png
+      - homepage.href=https://git.${BASE_DOMAIN}
+      - homepage.description=Git, merge requests, CI/CD, registry
 
   # Not started by default (profile `runner`): registration needs a token that
   # only exists after GitLab's first boot — Admin Area > CI/CD > Runners > New

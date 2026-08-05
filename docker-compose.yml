@@ -53,6 +53,11 @@ services:
       - traefik.http.routers.traefik.service=api@internal
       - traefik.http.routers.traefik.middlewares=dashboard-auth
       - traefik.http.middlewares.dashboard-auth.basicauth.usersfile=/etc/traefik/dashboard.htpasswd
+      - homepage.group=Platform
+      - homepage.name=Traefik
+      - homepage.icon=traefik.png
+      - homepage.href=https://traefik.${BASE_DOMAIN}
+      - homepage.description=Маршрутизация и TLS-сертификаты
 
   keycloak-db:
     image: postgres:16-alpine
@@ -90,3 +95,8 @@ services:
       - traefik.http.routers.keycloak.entrypoints=websecure
       - traefik.http.routers.keycloak.tls.certresolver=le
       - traefik.http.services.keycloak.loadbalancer.server.port=8080
+      - homepage.group=Platform
+      - homepage.name=Keycloak
+      - homepage.icon=keycloak.png
+      - homepage.href=https://sso.${BASE_DOMAIN}
+      - homepage.description=SSO, пользователи, realm-ы
