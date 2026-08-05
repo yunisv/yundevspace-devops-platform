@@ -44,7 +44,7 @@ services:
       - gitlab-logs:/var/log/gitlab
       - gitlab-data:/var/opt/gitlab
     ports:
-      # Private interface only, same as Traefik.
+      # NetBird interface only, same as Traefik — see docs/vpn-netbird.md.
       - "${BIND_ADDRESS}:2222:22" # git over SSH
     shm_size: 256m
     networks:
