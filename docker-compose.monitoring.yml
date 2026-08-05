@@ -25,7 +25,6 @@ services:
       - traefik.enable=true
       - traefik.http.routers.prometheus.rule=Host(`prometheus.${BASE_DOMAIN}`)
       - traefik.http.routers.prometheus.entrypoints=websecure
-      - traefik.http.routers.prometheus.tls.certresolver=le
       - traefik.http.routers.prometheus.middlewares=internal-only@file
       - traefik.http.services.prometheus.loadbalancer.server.port=9090
       - homepage.group=Observability
@@ -46,7 +45,6 @@ services:
       - traefik.enable=true
       - traefik.http.routers.alertmanager.rule=Host(`alerts.${BASE_DOMAIN}`)
       - traefik.http.routers.alertmanager.entrypoints=websecure
-      - traefik.http.routers.alertmanager.tls.certresolver=le
       - traefik.http.routers.alertmanager.middlewares=internal-only@file
       - traefik.http.services.alertmanager.loadbalancer.server.port=9093
       - homepage.group=Observability
@@ -123,7 +121,6 @@ services:
       - traefik.enable=true
       - traefik.http.routers.grafana.rule=Host(`grafana.${BASE_DOMAIN}`)
       - traefik.http.routers.grafana.entrypoints=websecure
-      - traefik.http.routers.grafana.tls.certresolver=le
       - traefik.http.routers.grafana.middlewares=internal-only@file
       - traefik.http.services.grafana.loadbalancer.server.port=3000
       - homepage.group=Observability

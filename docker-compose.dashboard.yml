@@ -45,7 +45,6 @@ services:
       # Handles the OIDC redirect/callback on the dashboard's own hostname.
       - traefik.http.routers.oauth2-proxy.rule=Host(`dash.${BASE_DOMAIN}`) && PathPrefix(`/oauth2/`)
       - traefik.http.routers.oauth2-proxy.entrypoints=websecure
-      - traefik.http.routers.oauth2-proxy.tls.certresolver=le
       - traefik.http.routers.oauth2-proxy.middlewares=internal-only@file
       - traefik.http.services.oauth2-proxy.loadbalancer.server.port=4180
       # Reusable middleware — attach `sso@docker` to any router that should
@@ -76,6 +75,5 @@ services:
       - traefik.enable=true
       - traefik.http.routers.homepage.rule=Host(`dash.${BASE_DOMAIN}`)
       - traefik.http.routers.homepage.entrypoints=websecure
-      - traefik.http.routers.homepage.tls.certresolver=le
       - traefik.http.routers.homepage.middlewares=internal-only@file,sso@docker
       - traefik.http.services.homepage.loadbalancer.server.port=3000
