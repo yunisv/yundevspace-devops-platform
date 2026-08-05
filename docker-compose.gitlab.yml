@@ -23,7 +23,18 @@ services:
   gitlab:
     image: gitlab/gitlab-ce:17.3.2-ce.0
     restart: unless-stopped
-    hostname: git.${BASE_DOMAIN}
+    # NOT `hostname: git.${BASE_DOMAIN}` — setting a container's hostname to
+    # something that matches a real domain also registers it in Docker's
+    # embedded DNS for every other container on this network. Any sibling
+    # container resolving git.${BASE_DOMAIN} then gets THIS container's
+    # internal IP directly instead of the public DNS record pointing at
+    # Traefik — bypassing the reverse proxy entirely and connecting straight
+    # to port 443 on a container whose nginx only listens on 80 (TLS is
+    # terminated at Traefik). That looks like a network failure to whatever
+    # tries it (reported against gitlab-runner failing to reach GitLab with
+    # no TLS listener on the other end). GitLab doesn't need the OS-level
+    # hostname to match anyway — external_url below is what it actually
+    # uses to know its own address.
     environment:
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'https://git.${BASE_DOMAIN}'
