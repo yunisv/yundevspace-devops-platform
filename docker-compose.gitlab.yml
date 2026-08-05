@@ -98,7 +98,15 @@ services:
       - -c
       - |
         set -e
-        if [ ! -f /etc/gitlab-runner/config.toml ]; then
+        # Checking for the file alone is wrong: `gitlab-runner register`
+        # writes the base config (concurrent/check_interval/session_server)
+        # before it contacts GitLab, so a registration that fails partway
+        # (e.g. a transient network issue) still leaves the file behind —
+        # and every restart after that would see "file exists" and skip
+        # registration forever, even though no [[runners]] block was ever
+        # written. Check for that section instead, so a failed attempt
+        # actually retries on the next restart.
+        if ! grep -q '^\[\[runners\]\]' /etc/gitlab-runner/config.toml 2>/dev/null; then
           if [ -z "${GITLAB_RUNNER_TOKEN}" ]; then
             echo "GITLAB_RUNNER_TOKEN is empty — create an instance runner in GitLab, put the glrt-... token in .env, then restart this service."
             exit 1
