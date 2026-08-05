@@ -33,15 +33,14 @@ services:
       # only challenge type that can issue a wildcard certificate.
       - --certificatesresolvers.le.acme.dnschallenge=true
       - --certificatesresolvers.le.acme.dnschallenge.provider=hetzner
-      # TLS is configured on the entrypoint rather than per router: with a
-      # per-router certresolver Traefik orders a separate certificate for
-      # every subdomain, publishing git./prometheus./dash. to the public
-      # Certificate Transparency logs. One wildcard here, inherited by all
-      # routers, keeps the subdomain names private.
+      # TLS on by default for every router here, but deliberately WITHOUT a
+      # certresolver: a resolver set at the entrypoint makes Traefik order a
+      # separate certificate per subdomain and never generate the wildcard
+      # (traefik/traefik#12109). Instead exactly one router below requests
+      # the wildcard, and everyone else is served it from the cert store —
+      # which is what keeps git./prometheus./dash. out of the public
+      # Certificate Transparency logs.
       - --entrypoints.websecure.http.tls=true
-      - --entrypoints.websecure.http.tls.certresolver=le
-      - --entrypoints.websecure.http.tls.domains[0].main=${BASE_DOMAIN}
-      - --entrypoints.websecure.http.tls.domains[0].sans=*.${BASE_DOMAIN}
       - --api.dashboard=true
       # Prometheus scrapes this (see config/prometheus/prometheus.yml). Without
       # these flags there is nothing listening for metrics at all.
@@ -73,6 +72,12 @@ services:
       - traefik.http.routers.traefik.rule=Host(`traefik.${BASE_DOMAIN}`)
       - traefik.http.routers.traefik.entrypoints=websecure
       - traefik.http.routers.traefik.service=api@internal
+      # The single wildcard request for the whole platform. Every other
+      # router omits certresolver and is served this certificate from the
+      # store; see the entrypoint comment above for why it lives here.
+      - traefik.http.routers.traefik.tls.certresolver=le
+      - traefik.http.routers.traefik.tls.domains[0].main=${BASE_DOMAIN}
+      - traefik.http.routers.traefik.tls.domains[0].sans=*.${BASE_DOMAIN}
       - traefik.http.routers.traefik.middlewares=internal-only@file,dashboard-auth
       - traefik.http.middlewares.dashboard-auth.basicauth.usersfile=/etc/traefik/dashboard.htpasswd
       - homepage.group=Platform

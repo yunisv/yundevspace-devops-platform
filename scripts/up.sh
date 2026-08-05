@@ -47,4 +47,9 @@ for layer in "$@"; do
   esac
 done
 
+# Pull first so a bad/withdrawn image tag fails here with a clear registry
+# error, instead of half the stack coming up and one service flapping.
+echo "Загружаю образы..."
+docker compose "${files[@]}" pull
+
 docker compose "${files[@]}" up -d
