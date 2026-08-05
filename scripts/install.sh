@@ -124,6 +124,7 @@ mkdir -p secrets
 if [ ! -f .env ]; then
   log ".env не найден — создаю и генерирую секреты"
   cp .env.example .env
+  chmod 600 .env # содержит пароли GitLab/Keycloak и токен Hetzner — не для чужих глаз
 
   domain="${BASE_DOMAIN:-}"
   email="${ACME_EMAIL:-}"
