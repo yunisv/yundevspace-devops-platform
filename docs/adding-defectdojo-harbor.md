@@ -36,9 +36,12 @@ services:
       - traefik.enable=true
       - traefik.http.routers.dojo.rule=Host(`dojo.${BASE_DOMAIN}`)
       - traefik.http.routers.dojo.entrypoints=websecure
-      - traefik.http.routers.dojo.tls.certresolver=le
+      - traefik.http.routers.dojo.middlewares=internal-only@file
       - traefik.http.services.dojo.loadbalancer.server.port=8443
       - traefik.http.services.dojo.loadbalancer.server.scheme=https
+      # НЕ добавлять tls.certresolver сюда — см. пояснение в adding-plane.md
+      # (entrypoint уже отдаёт TLS по умолчанию, wildcard заказывается
+      # только одним роутером в основном docker-compose.yml).
 
 networks:
   edge:
@@ -58,9 +61,11 @@ tar xzf harbor-online-installer-v2.11.1.tgz && cd harbor
 cp harbor.yml.tmpl harbor.yml
 ```
 
-В `harbor.yml` указать `hostname: registry.${BASE_DOMAIN}`, отключить
-встроенный TLS-терминатор Harbor (`https:` секцию закомментировать — TLS
-будет терминировать Traefik), затем:
+В `harbor.yml` указать `hostname: harbor.${BASE_DOMAIN}` — **не**
+`registry.${BASE_DOMAIN}`, этот поддомен уже занят Container Registry
+самого GitLab (см. `docker-compose.gitlab.yml`). Отключить встроенный
+TLS-терминатор Harbor (`https:` секцию закомментировать — TLS будет
+терминировать Traefik), затем:
 
 ```bash
 ./prepare
@@ -68,7 +73,9 @@ cp harbor.yml.tmpl harbor.yml
 ```
 
 После установки подключить прокси-контейнер Harbor к сети `devops_edge`
-так же, как DefectDojo выше, и добавить Traefik-лейблы на нужный порт.
+так же, как DefectDojo выше (роутер на `harbor.${BASE_DOMAIN}`,
+`middlewares=internal-only@file`, без своего `tls.certresolver`), и
+добавить Traefik-лейблы на нужный порт.
 
 ## Интеграция с CI
 

@@ -45,8 +45,15 @@ services:
       - traefik.enable=true
       - traefik.http.routers.plane.rule=Host(`pm.${BASE_DOMAIN}`)
       - traefik.http.routers.plane.entrypoints=websecure
-      - traefik.http.routers.plane.tls.certresolver=le
+      - traefik.http.routers.plane.middlewares=internal-only@file
       - traefik.http.services.plane.loadbalancer.server.port=80
+      # НЕ добавлять tls.certresolver сюда: сертификат этот роутер получает
+      # от entrypoint websecure (там уже включён TLS по умолчанию, а
+      # единственный wildcard-запрос живёт на роутере traefik в основном
+      # docker-compose.yml). Свой certresolver на этом роутере закажет ещё
+      # один отдельный сертификат именно на pm.${BASE_DOMAIN} — тот самый
+      # баг, который уже чинили в основном стеке (traefik/traefik#12109),
+      # и он же снова выведет это поддомен в публичные CT-логи.
 
 networks:
   edge:
