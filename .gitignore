@@ -8,3 +8,4 @@ secrets/*
 
 # Rendered from tls.yml.template by install.sh (contains the real domain)
 config/traefik/dynamic/tls.yml
+config/traefik/dynamic/access.yml
