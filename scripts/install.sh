@@ -88,24 +88,22 @@ else
 fi
 
 # --- 5. Docker-сеть --------------------------------------------------------
+# Сеть создаётся самим compose (в docker-compose.yml у неё закреплена
+# подсеть DOCKER_SUBNET) — вручную здесь не создаём, иначе она получит
+# случайную подсеть и разойдётся с ip-фильтром Traefik.
 log "Docker-сеть devops_edge"
 if docker network inspect devops_edge >/dev/null 2>&1; then
-  echo "Уже существует"
+  echo "Уже существует (проверьте, что её подсеть совпадает с DOCKER_SUBNET в .env)"
 else
-  docker network create devops_edge
-  echo "Создана"
+  echo "Будет создана автоматически при старте compose"
 fi
 
 # --- 6. Firewall -----------------------------------------------------------
-# Порты намеренно НЕ открываются здесь: цель — закрытый наружу сервер с
-# доступом через VPN. Ограничения накатываются отдельно ./scripts/harden.sh,
-# уже после того как VPN поднят и проверен (иначе легко запереть себя).
-if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
-  log "ufw активен — проверяю, что 443 открыт (нужен для выдачи доступа в VPN)"
-  ufw allow 443/tcp >/dev/null
-else
-  warn "ufw не активен. Итоговую блокировку портов накатите ./scripts/harden.sh после установки VPN (docs/vpn-netbird.md)."
-fi
+# Порты здесь не открываются: сервисы биндятся только на приватный
+# интерфейс (BIND_ADDRESS), снаружи слушать нечего. Итоговую блокировку
+# публичного интерфейса накатывает ./scripts/harden.sh — отдельно и после
+# того, как проверен доступ через VPN.
+warn "Правила фаервола не трогаю. После проверки доступа через VPN запустите ./scripts/harden.sh (см. docs/network-access.md)."
 
 # --- 7. .env + секреты ------------------------------------------------------
 mkdir -p secrets
@@ -161,12 +159,30 @@ if [ -z "${HETZNER_API_KEY:-}" ]; then
   exit 1
 fi
 
-# Traefik-овский file provider не умеет переменные, поэтому wildcard-конфиг
-# рендерим из шаблона с подставленным доменом.
+# Платформа слушает только приватный интерфейс — проверяем, что указанный
+# адрес на этой машине действительно есть, иначе docker молча не поднимется
+# или, хуже, забиндится не туда.
+if ! ip -4 addr show 2>/dev/null | grep -qw "${BIND_ADDRESS}"; then
+  echo "BIND_ADDRESS=${BIND_ADDRESS} не найден среди адресов этой машины." >&2
+  echo "Укажите приватный IP сервера в сети Hetzner. Доступные адреса:" >&2
+  ip -4 -o addr show 2>/dev/null | awk '{print "  " $2 " " $4}' >&2
+  exit 1
+fi
+
+# Traefik-овский file provider не умеет переменные, поэтому доменные и
+# сетевые куски конфига рендерим из шаблонов.
 if [ ! -f config/traefik/dynamic/tls.yml ]; then
   log "Генерирую config/traefik/dynamic/tls.yml (wildcard-сертификат)"
   sed "s#__BASE_DOMAIN__#${BASE_DOMAIN}#g" \
     config/traefik/dynamic/tls.yml.template > config/traefik/dynamic/tls.yml
+fi
+
+if [ ! -f config/traefik/dynamic/access.yml ]; then
+  log "Генерирую config/traefik/dynamic/access.yml (разрешённые подсети)"
+  sed -e "s#__VPN_SUBNET__#${VPN_SUBNET}#g" \
+      -e "s#__PRIVATE_SUBNET__#${PRIVATE_SUBNET}#g" \
+      -e "s#__DOCKER_SUBNET__#${DOCKER_SUBNET}#g" \
+    config/traefik/dynamic/access.yml.template > config/traefik/dynamic/access.yml
 fi
 
 # Traefik dashboard basic-auth — отдельным файлом (htpasswd), не через .env:
@@ -204,8 +220,8 @@ cat <<EOF
   4. https://sso.${BASE_DOMAIN} — создать realm и клиент для oauth2-proxy,
      затем поднять стартовую страницу со всеми сервисами:
      ./scripts/up.sh dashboard        (инструкция: docs/dashboard-sso.md)
-  5. VPN: поставить NetBird (docs/vpn-netbird.md), проверить доступ, и только
-     ПОСЛЕ этого закрыть сервер наружу:
+  5. Проверить, что через VPN открывается https://git.${BASE_DOMAIN}, и только
+     ПОСЛЕ этого закрыть публичный интерфейс (docs/network-access.md):
      sudo ./scripts/harden.sh
   6. Plane / DefectDojo / Harbor ставятся отдельно официальными установщиками —
      см. docs/adding-plane.md и docs/adding-defectdojo-harbor.md.

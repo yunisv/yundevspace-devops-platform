@@ -44,7 +44,8 @@ services:
       - gitlab-logs:/var/log/gitlab
       - gitlab-data:/var/opt/gitlab
     ports:
-      - "2222:22" # git over SSH
+      # Private interface only, same as Traefik.
+      - "${BIND_ADDRESS}:2222:22" # git over SSH
     shm_size: 256m
     networks:
       - edge

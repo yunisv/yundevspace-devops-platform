@@ -1,0 +1,16 @@
+# Template — ./scripts/install.sh renders this into access.yml with the
+# subnets from .env substituted in.
+#
+# Second line of defence. Traefik already binds only to the private
+# interface (BIND_ADDRESS), so nothing reaches it from the internet; this
+# additionally rejects anything on the private side that isn't a VPN client
+# or an internal host.
+http:
+  middlewares:
+    internal-only:
+      ipAllowList:
+        sourceRange:
+          - "__VPN_SUBNET__"
+          - "__PRIVATE_SUBNET__"
+          - "__DOCKER_SUBNET__"
+          - "127.0.0.1/32"

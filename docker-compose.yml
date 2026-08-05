@@ -6,6 +6,11 @@
 networks:
   edge:
     name: devops_edge
+    # Pinned so config/traefik/dynamic/access.yml can allow exactly this
+    # range rather than the whole 172.16.0.0/12 private block.
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET}
 
 volumes:
   traefik-acme:
@@ -44,8 +49,10 @@ services:
       # it to HETZNER_API_TOKEN, so check this if you bump the Traefik image.
       HETZNER_API_KEY: ${HETZNER_API_KEY}
     ports:
-      # No :80 — nothing needs it now that ACME uses DNS-01.
-      - "443:443"
+      # Bound to the private interface only — the platform never listens on
+      # the public one, so there is nothing to reach from the internet even
+      # before firewall rules. No :80 either, since ACME uses DNS-01.
+      - "${BIND_ADDRESS}:443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-acme:/acme
@@ -99,9 +106,10 @@ services:
       - edge
     labels:
       - traefik.enable=true
-      # Deliberately NOT internal-only: users authenticate here to get onto
-      # the VPN, so it has to stay reachable from the internet.
       - traefik.http.routers.keycloak.rule=Host(`sso.${BASE_DOMAIN}`)
+      # Internal like everything else: VPN access is authenticated by the
+      # firewall, so Keycloak never has to be reachable from the internet.
+      - traefik.http.routers.keycloak.middlewares=internal-only@file
       - traefik.http.routers.keycloak.entrypoints=websecure
       - traefik.http.routers.keycloak.tls.certresolver=le
       - traefik.http.services.keycloak.loadbalancer.server.port=8080
