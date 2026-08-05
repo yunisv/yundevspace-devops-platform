@@ -10,6 +10,8 @@
 #   ./scripts/install.sh --layers="gitlab automation"    # pick specific layers
 #
 # Non-interactive: export BASE_DOMAIN and ACME_EMAIL before running.
+# Run this AFTER installing NetBird and joining this host to it as a peer
+# (docs/vpn-netbird.md) — BIND_ADDRESS below only exists once that's done.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -110,11 +112,11 @@ else
 fi
 
 # --- 6. Firewall -----------------------------------------------------------
-# Порты здесь не открываются: сервисы биндятся только на приватный
-# интерфейс (BIND_ADDRESS), снаружи слушать нечего. Итоговую блокировку
-# публичного интерфейса накатывает ./scripts/harden.sh — отдельно и после
-# того, как проверен доступ через VPN.
-warn "Правила фаервола не трогаю. После проверки доступа через VPN запустите ./scripts/harden.sh (см. docs/network-access.md)."
+# Порты здесь не открываются: сервисы биндятся только на интерфейс NetBird
+# (BIND_ADDRESS), снаружи слушать нечего. Итоговую блокировку публичного
+# интерфейса накатывает ./scripts/harden.sh — отдельно, после того как
+# NetBird установлен и доступ через него проверен.
+warn "Правила фаервола не трогаю. Сначала установите NetBird (docs/vpn-netbird.md), затем запустите ./scripts/harden.sh."
 
 # --- 7. .env + секреты ------------------------------------------------------
 mkdir -p secrets
@@ -172,10 +174,11 @@ if [ -z "${HETZNER_API_KEY:-}" ]; then
   problems+=("HETZNER_API_KEY — токен из dns.hetzner.com -> API tokens (без него не будет сертификатов)")
 fi
 
-# Платформа слушает только приватный интерфейс. -F, потому что точки в IP
-# иначе трактуются как любой символ.
+# Платформа слушает только интерфейс NetBird (wt0) — он появляется после
+# `netbird up` (см. docs/vpn-netbird.md). -F, потому что точки в IP иначе
+# трактуются как любой символ.
 if [ -z "${BIND_ADDRESS:-}" ] || ! host_addrs | grep -qFw "${BIND_ADDRESS}"; then
-  problems+=("BIND_ADDRESS=${BIND_ADDRESS:-<пусто>} — такого адреса нет на этой машине")
+  problems+=("BIND_ADDRESS=${BIND_ADDRESS:-<пусто>} — такого адреса нет на этой машине. Установлен ли NetBird и выполнен ли 'netbird up'? См. docs/vpn-netbird.md")
 fi
 
 if [ ${#problems[@]} -gt 0 ]; then
@@ -190,14 +193,13 @@ if [ ${#problems[@]} -gt 0 ]; then
   exit 1
 fi
 
-# Эти три подсети определяют, кого пустит ip-фильтр. Ошибка здесь не ломает
+# Эти подсети определяют, кого пустит ip-фильтр. Ошибка здесь не ломает
 # установку, но потом даёт 403 на ровном месте — поэтому показываем явно.
 log "Сетевые параметры (проверьте, что совпадают с реальностью)"
 cat <<EOF
-  Приватный IP сервера : ${BIND_ADDRESS}
-  Подсеть VPN-клиентов : ${VPN_SUBNET}
-  Приватная сеть       : ${PRIVATE_SUBNET}
-  Сеть контейнеров     : ${DOCKER_SUBNET}
+  IP сервера в сети NetBird : ${BIND_ADDRESS}
+  Подсеть NetBird           : ${VPN_SUBNET}
+  Сеть контейнеров          : ${DOCKER_SUBNET}
 EOF
 
 # Подсеть docker-сети закреплена в compose. Если сеть уже существует с
@@ -221,7 +223,6 @@ fi
 if [ ! -f config/traefik/dynamic/access.yml ]; then
   log "Генерирую config/traefik/dynamic/access.yml (разрешённые подсети)"
   sed -e "s#__VPN_SUBNET__#${VPN_SUBNET}#g" \
-      -e "s#__PRIVATE_SUBNET__#${PRIVATE_SUBNET}#g" \
       -e "s#__DOCKER_SUBNET__#${DOCKER_SUBNET}#g" \
     config/traefik/dynamic/access.yml.template > config/traefik/dynamic/access.yml
 fi
@@ -255,8 +256,9 @@ chmod +x scripts/up.sh
 log "Готово"
 cat <<EOF
 
-DNS: поддомены должны резолвиться в ПРИВАТНЫЙ адрес ${BIND_ADDRESS}
-(проще всего wildcard *.${BASE_DOMAIN} A ${BIND_ADDRESS}). Нужны:
+DNS: поддомены должны резолвиться в адрес ${BASE_DOMAIN} этого сервера В
+СЕТИ NETBIRD (${BIND_ADDRESS}), не в публичный IP. Проще всего wildcard
+*.${BASE_DOMAIN} A ${BIND_ADDRESS}. Нужны:
   git, registry, sso, traefik, grafana, prometheus, alerts, automation, dash
 
 Дальше руками (подробности в README.md):
@@ -270,8 +272,8 @@ DNS: поддомены должны резолвиться в ПРИВАТНЫ�
   4. https://sso.${BASE_DOMAIN} — создать realm и клиент для oauth2-proxy,
      затем поднять стартовую страницу со всеми сервисами:
      ./scripts/up.sh dashboard        (инструкция: docs/dashboard-sso.md)
-  5. Проверить, что через VPN открывается https://git.${BASE_DOMAIN}, и только
-     ПОСЛЕ этого закрыть публичный интерфейс (docs/network-access.md):
+  5. Проверить, что через NetBird открывается https://git.${BASE_DOMAIN}, и
+     только ПОСЛЕ этого закрыть публичный интерфейс (docs/vpn-netbird.md):
      sudo ./scripts/harden.sh
   6. Plane / DefectDojo / Harbor ставятся отдельно официальными установщиками —
      см. docs/adding-plane.md и docs/adding-defectdojo-harbor.md.
