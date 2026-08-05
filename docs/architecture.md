@@ -111,9 +111,19 @@ Container Registry), отдельный Harbor для этого не нужен
 
 ## Регистрация GitLab Runner
 
+Раннер вынесен в compose-профиль `runner` и **не стартует по умолчанию**:
+токен для регистрации существует только после первого запуска GitLab, так
+что автостарт приводил бы к падению контейнера в цикле.
+
 1. Поднять core + gitlab: `./scripts/up.sh gitlab` и дождаться первого старта (3-5 минут — `docker compose logs -f gitlab` до строки `gitlab Reconfigured!`).
 2. Зайти под `root`/`GITLAB_ROOT_PASSWORD` → Admin Area → CI/CD → Runners → **New instance runner**, скопировать сгенерированный токен (`glrt-...`).
-3. Прописать токен в `.env` как `GITLAB_RUNNER_TOKEN`, перезапустить `gitlab-runner`: `docker compose -f docker-compose.yml -f docker-compose.gitlab.yml up -d gitlab-runner`.
+3. Прописать токен в `.env` как `GITLAB_RUNNER_TOKEN` и поднять раннер:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.gitlab.yml --profile runner up -d
+   ```
+
+Регистрация выполняется один раз — при последующих рестартах контейнер
+видит готовый `/etc/gitlab-runner/config.toml` и сразу переходит к работе.
 
 ## Ресурсы сервера (ориентир для 10-50 разработчиков)
 

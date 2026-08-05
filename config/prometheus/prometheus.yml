@@ -20,11 +20,14 @@ scrape_configs:
     static_configs:
       - targets: ["cadvisor:8080"]
 
+  # Requires gitlab_rails['monitoring_whitelist'] to cover this container's
+  # subnet, otherwise GitLab answers 404 (set in docker-compose.gitlab.yml).
   - job_name: gitlab
     metrics_path: /-/metrics
     static_configs:
       - targets: ["gitlab:80"]
 
+  # Port 8082 is the dedicated metrics entrypoint enabled in docker-compose.yml.
   - job_name: traefik
     static_configs:
-      - targets: ["traefik:8080"]
+      - targets: ["traefik:8082"]

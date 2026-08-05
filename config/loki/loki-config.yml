@@ -26,3 +26,10 @@ schema_config:
 
 limits_config:
   retention_period: 336h
+
+# retention_period above is only enforced if the compactor runs with
+# retention enabled — without this block old chunks are kept forever.
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
