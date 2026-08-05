@@ -8,9 +8,9 @@
 # oauth2-proxy is used rather than thomseddon/traefik-forward-auth, which
 # has had no commits since 2021.
 
+# NOT external:true — see docker-compose.gitlab.yml for why.
 networks:
   edge:
-    external: true
     name: devops_edge
 
 volumes:

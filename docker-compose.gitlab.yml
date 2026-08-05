@@ -4,9 +4,13 @@
 # scale as a single integrated product, at the cost of being heavier
 # (plan for 8GB+ RAM for GitLab alone — see docs/architecture.md).
 
+# NOT external:true here — this file is always run combined with the core
+# docker-compose.yml (which owns and creates this network), never alone.
+# Marking it external in both places merges into a spec that's both
+# external and self-created, and Compose refuses to create it at all
+# ("declared as external, but could not be found") on a fresh install.
 networks:
   edge:
-    external: true
     name: devops_edge
 
 volumes:

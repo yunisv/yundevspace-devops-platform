@@ -5,9 +5,9 @@
 # docs/ai-agents-roadmap.md) — n8n calls out to an LLM API node and feeds
 # the result back into the pipeline (e.g. as a GitLab MR comment or a gate).
 
+# NOT external:true — see docker-compose.gitlab.yml for why.
 networks:
   edge:
-    external: true
     name: devops_edge
 
 volumes:

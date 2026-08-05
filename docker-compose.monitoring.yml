@@ -1,9 +1,9 @@
 # Observability: metrics (Prometheus + node-exporter + cAdvisor), logs
 # (Loki + Promtail), dashboards (Grafana), alerting (Alertmanager).
 
+# NOT external:true — see docker-compose.gitlab.yml for why.
 networks:
   edge:
-    external: true
     name: devops_edge
 
 volumes:
