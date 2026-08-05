@@ -18,7 +18,7 @@ volumes:
 
 services:
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3.6.7
     restart: unless-stopped
     command:
       - --providers.docker=true
@@ -51,10 +51,16 @@ services:
       # router on this entrypoint, instead of leaving it defined but unused.
       - --entrypoints.websecure.http.middlewares=security-headers@file
     environment:
-      # Hetzner DNS API token for the DNS-01 challenge above. Traefik v3.1
-      # bundles lego v4.17, which reads HETZNER_API_KEY; lego v4.27+ renamed
-      # it to HETZNER_API_TOKEN, so check this if you bump the Traefik image.
-      HETZNER_API_KEY: ${HETZNER_API_KEY}
+      # Hetzner API token for the DNS-01 challenge above. Hetzner merged DNS
+      # management into the unified Hetzner Console in 2026 — zones created
+      # there use the Cloud API, not the old dns.hetzner.com API, and need a
+      # token generated in that same Console (Security -> API Tokens), not
+      # the legacy DNS Console. lego only added support for this under
+      # HETZNER_API_TOKEN in v4.27; v3.6.7 here bundles v4.30+. Pinning to
+      # anything older breaks cert issuance for zones created after the
+      # migration — verify HETZNER_API_TOKEN against whatever image tag you
+      # bump this to.
+      HETZNER_API_TOKEN: ${HETZNER_API_TOKEN}
     ports:
       # Bound to the NetBird mesh interface only (see docs/vpn-netbird.md) —
       # the platform never listens on the public interface at all, so there
