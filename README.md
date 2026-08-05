@@ -84,7 +84,7 @@ sudo ./scripts/install.sh                       # gitlab + мониторинг 
 1. `https://sso.${BASE_DOMAIN}` — создать realm/клиентов в Keycloak для остальных сервисов.
 2. `https://git.${BASE_DOMAIN}` — залогиниться как `root` / `GITLAB_ROOT_PASSWORD`, создать первую группу/проект.
 3. Admin Area → CI/CD → Runners → New instance runner — скопировать токен, прописать в `.env` как `GITLAB_RUNNER_TOKEN`, поднять раннер (он в профиле `runner`, поэтому сам не стартует): `docker compose -f docker-compose.yml -f docker-compose.gitlab.yml --profile runner up -d`
-4. `https://grafana.${BASE_DOMAIN}` — датасорсы Prometheus/Loki уже прописаны автоматически.
+4. `https://grafana.${BASE_DOMAIN}` — датасорсы Prometheus/Loki и дашборды (Node Exporter Full, Docker Containers) уже прописаны автоматически.
 5. `https://automation.${BASE_DOMAIN}` — **сразу создать owner-аккаунт** (n8n убрал basic-auth в версии 1.0, доступ закрывает только собственный аккаунт — пока он не создан, занять его может любой, кто откроет адрес), затем настроить workflow'ы под вебхуки GitLab/Plane/DefectDojo/Alertmanager.
 6. Стартовая страница `https://dash.${BASE_DOMAIN}` со всеми сервисами — поднимается отдельно, после настройки realm/клиента в Keycloak: [docs/dashboard-sso.md](docs/dashboard-sso.md), затем `./scripts/up.sh dashboard`.
 7. Plane ставится отдельно по [docs/adding-plane.md](docs/adding-plane.md) — там же настройка GitLab-интеграции и вебхуков в n8n.
