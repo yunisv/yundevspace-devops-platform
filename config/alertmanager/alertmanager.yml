@@ -7,8 +7,14 @@ route:
 
 receivers:
   - name: default
-    # Point this at n8n's webhook endpoint so alerts can be routed to
-    # Slack/Telegram/PM tickets through the same automation layer used
-    # for CI/CD events. Example:
-    # webhook_configs:
-    #   - url: https://automation.${BASE_DOMAIN}/webhook/alertmanager
+    webhook_configs:
+      # Internal docker service name, not the public domain — this traffic
+      # never needs to leave the edge network, and going out through
+      # Traefik/public DNS for container-to-container calls is exactly the
+      # kind of self-inflicted routing bug already hit once in this repo
+      # (see the gitlab `hostname:` fix). Create a Webhook-trigger workflow
+      # in n8n listening on this exact path (docs/ai-agents-roadmap.md) —
+      # until then, Alertmanager will just log delivery failures here,
+      # which is safe but means alerts currently go nowhere.
+      - url: http://n8n:5678/webhook/alertmanager
+        send_resolved: true
