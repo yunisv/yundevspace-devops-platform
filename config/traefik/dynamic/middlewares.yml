@@ -6,6 +6,17 @@ http:
     security-headers:
       headers:
         stsSeconds: 31536000
-        frameDeny: true
+        # SAMEORIGIN, not frameDeny (= DENY): Keycloak's admin console uses
+        # its own same-origin iframe (silent-check-sso) internally, and a
+        # blanket DENY here blocks that, breaking the console with a raw
+        # React error screen ("somethingWentWrong") instead of a login page
+        # — a known class of issue with reverse proxies forcing DENY
+        # (traefik/traefik#12695 and similar upstream reports). SAMEORIGIN
+        # still blocks framing from any other site, which is the actual
+        # clickjacking protection this header is for.
+        #
+        # Also: don't combine this with frameDeny:true — customFrameOptionsValue
+        # is documented to not reliably override frameDeny (traefik/traefik#9888).
+        customFrameOptionsValue: SAMEORIGIN
         contentTypeNosniff: true
         browserXssFilter: true
