@@ -47,11 +47,20 @@ services:
       - traefik.http.routers.oauth2-proxy.entrypoints=websecure
       - traefik.http.routers.oauth2-proxy.middlewares=internal-only@file
       - traefik.http.services.oauth2-proxy.loadbalancer.server.port=4180
-      # Reusable middleware — attach `sso@docker` to any router that should
-      # sit behind Keycloak login.
+      # Reusable middleware — attach `sso-errors@docker,sso@docker` (in that
+      # order) to any router that should sit behind Keycloak login.
       - traefik.http.middlewares.sso.forwardauth.address=http://oauth2-proxy:4180/oauth2/auth
       - traefik.http.middlewares.sso.forwardauth.trustForwardHeader=true
       - traefik.http.middlewares.sso.forwardauth.authResponseHeaders=X-Auth-Request-User,X-Auth-Request-Email
+      # forwardauth alone just returns oauth2-proxy's bare 401 from /oauth2/auth
+      # (a verify-only endpoint) — it never redirects anywhere on its own.
+      # This middleware catches that 401 and turns it into a redirect to the
+      # actual sign-in flow, with statusRewrites so the browser treats it as
+      # a real 302 instead of displaying the 401 response's body as a page.
+      - traefik.http.middlewares.sso-errors.errors.status=401-403
+      - traefik.http.middlewares.sso-errors.errors.service=oauth2-proxy
+      - traefik.http.middlewares.sso-errors.errors.query=/oauth2/sign_in?rd={url}
+      - traefik.http.middlewares.sso-errors.errors.statusRewrites.401=302
 
   homepage:
     image: ghcr.io/gethomepage/homepage:v0.10.9
@@ -75,5 +84,5 @@ services:
       - traefik.enable=true
       - traefik.http.routers.homepage.rule=Host(`dash.${BASE_DOMAIN}`)
       - traefik.http.routers.homepage.entrypoints=websecure
-      - traefik.http.routers.homepage.middlewares=internal-only@file,sso@docker
+      - traefik.http.routers.homepage.middlewares=internal-only@file,sso-errors@docker,sso@docker
       - traefik.http.services.homepage.loadbalancer.server.port=3000
