@@ -73,7 +73,15 @@ services:
       - ./config/traefik/dynamic:/etc/traefik/dynamic:ro
       - ./secrets/dashboard.htpasswd:/etc/traefik/dashboard.htpasswd:ro
     networks:
-      - edge
+      edge:
+        # Lets any container on this network reach our own subdomains
+        # (e.g. oauth2-proxy -> https://sso.${BASE_DOMAIN} for OIDC discovery)
+        # directly by container IP instead of hairpinning back out through
+        # the host's own NetBird interface, which times out — Docker
+        # doesn't reliably route a container's request back to its own
+        # host's external-facing address.
+        aliases:
+          - sso.${BASE_DOMAIN}
     labels:
       - traefik.enable=true
       - traefik.http.routers.traefik.rule=Host(`traefik.${BASE_DOMAIN}`)
