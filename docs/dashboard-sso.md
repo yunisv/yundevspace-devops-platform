@@ -57,12 +57,16 @@ Let's Encrypt не выдаст сертификат.
 
 ## Как закрыть этим же логином другие сервисы
 
-oauth2-proxy публикует Traefik-middleware `sso@docker`. Любому роутеру
-можно её навесить — и сервис уедет за тот же Keycloak-логин:
+oauth2-proxy публикует две Traefik-middleware, которые нужно вешать
+**вместе и в этом порядке** — `sso-errors@docker`, потом `sso@docker`.
+Одного `sso@docker` (`forwardAuth`) недостаточно: сам по себе он на
+неавторизованный запрос просто отдаёт голый `401 Unauthorized` от
+`/oauth2/auth` (эндпоинт только для проверки, без редиректа никуда) —
+`sso-errors` перехватывает этот 401 и уводит на страницу логина:
 
 ```yaml
 labels:
-  - traefik.http.routers.prometheus.middlewares=sso@docker
+  - traefik.http.routers.prometheus.middlewares=sso-errors@docker,sso@docker
 ```
 
 Полезно для Prometheus и Alertmanager: у них **нет собственной
