@@ -106,7 +106,10 @@ services:
       # плитка появилась на dash.${BASE_DOMAIN} сама.
       - homepage.group=Security
       - homepage.name=DefectDojo
-      - homepage.icon=defectdojo.png
+      # defectdojo.png не существует в наборе иконок Homepage (проверено —
+      # 404) — используем встроенную Material Design Icon вместо внешнего
+      # набора, она не зависит от того, есть ли сервис в dashboard-icons.
+      - homepage.icon=mdi-spider
       - homepage.href=https://dojo.${BASE_DOMAIN}
       - homepage.description=Агрегация находок SAST/DAST/SCA
 
