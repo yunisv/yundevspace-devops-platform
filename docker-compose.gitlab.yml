@@ -122,11 +122,19 @@ services:
             echo "GITLAB_RUNNER_TOKEN is empty — create an instance runner in GitLab, put the glrt-... token in .env, then restart this service."
             exit 1
           fi
+          # --docker-network-mode: without this, job containers (the
+          # ephemeral docker-executor container per job, NOT this
+          # long-running gitlab-runner container) land on Docker's default
+          # bridge network instead of devops_edge — meaning they don't get
+          # the subdomain aliases from docker-compose.yml either, and hit
+          # the exact same git.${BASE_DOMAIN} hairpin-timeout bug all over
+          # again, just from a container this one doesn't even control.
           gitlab-runner register --non-interactive \
             --url "https://git.${BASE_DOMAIN}" \
             --token "${GITLAB_RUNNER_TOKEN}" \
             --executor docker \
             --docker-image docker:24-git \
+            --docker-network-mode devops_edge \
             --docker-volumes /var/run/docker.sock:/var/run/docker.sock \
             --description docker-runner-1
         fi
