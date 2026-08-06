@@ -71,7 +71,7 @@ middleware `internal-only@file` — отвечает только пирам с�
 | ✅ | Plane — установлен, работает за Traefik (`pm.devops.2be.az`) |
 | ✅ | DefectDojo — установлен, работает за Traefik (`dojo.devops.2be.az`) |
 | ✅ | n8n: workflow `Alerts_TG` (Webhook → Code → Telegram) на `/webhook/alertmanager`, проверен вживую |
-| ⬜ | Первый проект в GitLab + тестовый `.gitlab-ci.yml` |
+| ✅ | Первый проект в GitLab (`usta_tap`) + пайплайн реально подхвачен раннером и выполняется |
 | ⬜ | NetBird Access Control (пока не настроено — актуально, когда подключится больше людей) |
 | ⬜ | AI-агенты в n8n (`docs/ai-agents-roadmap.md`) |
 
