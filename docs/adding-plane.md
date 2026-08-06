@@ -180,6 +180,14 @@ long-syntax с `target`/`published`/`mode: host` через
       # один отдельный сертификат именно на pm.${BASE_DOMAIN} — тот самый
       # баг, который уже чинили в основном стеке (traefik/traefik#12109),
       # и он же снова выведет этот поддомен в публичные CT-логи.
+      # Homepage видит любой контейнер на хосте через docker.sock, вне
+      # зависимости от compose-проекта — этих лейблов достаточно, чтобы
+      # плитка появилась на dash.${BASE_DOMAIN} сама.
+      - homepage.group=Development
+      - homepage.name=Plane
+      - homepage.icon=plane.png
+      - homepage.href=https://pm.${BASE_DOMAIN}
+      - homepage.description=Issue tracking / PM
 
 networks:
   edge:
