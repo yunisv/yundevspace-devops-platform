@@ -64,8 +64,9 @@ middleware `internal-only@file` — отвечает только пирам с�
 | ✅ | n8n — owner-аккаунт создан |
 | ✅ | Homepage (dashboard) за Keycloak SSO |
 | ✅ | NetBird: control plane + DevPlat как peer |
-| 🔄 | `harden.sh` — выполняется по ходу этой сессии |
-| 🔄 | SSH: непривилегированный пользователь + `PermitRootLogin no` — выполняется |
+| ✅ | `harden.sh` — публичный интерфейс закрыт (ufw) |
+| ✅ | SSH: непривилегированный пользователь + ключ + `PermitRootLogin no` |
+| ✅ | Hetzner Cloud Firewall на DevPlat — deny-all inbound, проверено `Test-NetConnection`/`nmap` снаружи |
 | ⬜ | Cron для `scripts/backup.sh` + копирование архивов с сервера |
 | ✅ | Plane — установлен, работает за Traefik (`pm.devops.2be.az`) |
 | ✅ | DefectDojo — установлен, работает за Traefik (`dojo.devops.2be.az`) |
