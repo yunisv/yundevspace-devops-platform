@@ -101,6 +101,14 @@ services:
       # НЕ добавлять tls.certresolver сюда — см. пояснение в adding-plane.md
       # (entrypoint уже отдаёт TLS по умолчанию, wildcard заказывается
       # только одним роутером в основном docker-compose.yml).
+      # Homepage видит любой контейнер на хосте через docker.sock, вне
+      # зависимости от compose-проекта — этих лейблов достаточно, чтобы
+      # плитка появилась на dash.${BASE_DOMAIN} сама.
+      - homepage.group=Security
+      - homepage.name=DefectDojo
+      - homepage.icon=defectdojo.png
+      - homepage.href=https://dojo.${BASE_DOMAIN}
+      - homepage.description=Агрегация находок SAST/DAST/SCA
 
 networks:
   edge:
