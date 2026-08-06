@@ -95,6 +95,13 @@ services:
           - grafana.${BASE_DOMAIN}
           - automation.${BASE_DOMAIN}
           - dash.${BASE_DOMAIN}
+          # Plane and DefectDojo live in their own separate compose projects
+          # (official installers, not this repo) but still attach to this
+          # same devops_edge network — the hairpin problem applies to them
+          # exactly the same way, e.g. a CI job container calling DefectDojo's
+          # API to import a scan report.
+          - pm.${BASE_DOMAIN}
+          - dojo.${BASE_DOMAIN}
     labels:
       - traefik.enable=true
       - traefik.http.routers.traefik.rule=Host(`traefik.${BASE_DOMAIN}`)
