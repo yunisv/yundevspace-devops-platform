@@ -43,6 +43,11 @@ services:
       # no SMTP configured in Keycloak to send one) — without this, every
       # login 500s with "email in id_token isn't verified".
       OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL: "true"
+      # Keycloak 21+ puts its built-in "account" client in the ID token's
+      # aud claim by default instead of the requesting client_id, unless you
+      # add a dedicated audience mapper — accepting it as an extra audience
+      # here is the one-line fix instead of a Keycloak-side mapper per client.
+      OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES: account
     networks:
       - edge
     labels:
