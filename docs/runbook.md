@@ -60,9 +60,9 @@ middleware `internal-only@file` — отвечает только пирам с�
 |---|---|
 | ✅ | Core (Traefik + Keycloak) |
 | ✅ | GitLab CE + Runner (зарегистрирован и подхватывает джобы) |
-| ✅ | Мониторинг: Prometheus/Grafana (с дашбордами)/Loki/Alertmanager |
+| ✅ | Мониторинг: Prometheus/Grafana (дашборды Node Exporter Full/Docker Containers — проверены вживую)/Loki/Alertmanager |
 | ✅ | n8n — owner-аккаунт создан |
-| ✅ | Homepage (dashboard) за Keycloak SSO |
+| ✅ | Homepage (dashboard) за Keycloak SSO — полный флоу логина проверен вживую (realm/client/oauth2-proxy) |
 | ✅ | NetBird: control plane + DevPlat как peer |
 | ✅ | `harden.sh` — публичный интерфейс закрыт (ufw) |
 | ✅ | SSH: непривилегированный пользователь + ключ + `PermitRootLogin no` |
