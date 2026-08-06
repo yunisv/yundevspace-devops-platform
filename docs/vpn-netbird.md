@@ -130,6 +130,37 @@ sudo ./scripts/harden.sh --dry-run
 sudo ./scripts/harden.sh
 ```
 
+## Шаг 7. Hetzner Cloud Firewall на DevPlat (deny-all inbound)
+
+`ufw`/`harden.sh` работают на уровне ОС — но у Docker свои iptables-правила
+(цепочка `DOCKER`), которые обрабатываются раньше `INPUT`, где живут
+правила ufw. На практике это значит, что публикация порта контейнером
+(`ports: ["8080:8080"]` на `0.0.0.0`) может остаться доступна снаружи
+даже при включённом `ufw` — ровно так один раз и случилось при установке
+DefectDojo (см. `adding-defectdojo-harbor.md`).
+
+Hetzner Cloud Firewall работает на уровне гипервизора/сети, до того как
+трафик вообще доходит до сервера — Docker его обойти не может в принципе.
+Раз DevPlat не требует ни одного входящего порта вообще (NetBird
+подключается как peer, исходящим соединением/hole-punching через
+`netbird-edge`), тут можно поставить honest deny-all:
+
+1. Hetzner Cloud Console → проект → **Firewalls** → **Create Firewall**.
+2. **Inbound rules** — оставить пустым (ничего не разрешать явно).
+3. **Outbound rules** — оставить дефолтный **Allow all**.
+4. **Resources** → применить на сервер DevPlat.
+
+Проверка сразу после применения — SSH через NetBird должен продолжать
+работать, а публичный IP не должен отвечать вообще ни на что:
+
+```bash
+ssh devplat                                              # через NetBird — должен работать
+curl -m 5 -sk https://<публичный IP DevPlat> -o /dev/null -w "%{http_code}\n"   # таймаут, не код
+```
+
+Это не замена `ufw`/`harden.sh`, а дополнительный слой поверх — оставить
+оба: если один когда-то будет неверно настроен, второй всё ещё прикрывает.
+
 ## Если заперлись снаружи
 
 Консоль Hetzner (Server → Console, работает в обход сети):
