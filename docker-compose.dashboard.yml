@@ -38,6 +38,11 @@ services:
       OAUTH2_PROXY_EMAIL_DOMAINS: "*"
       OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
       OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      # Accounts here are created by an admin directly in Keycloak, not via
+      # public self-registration, so there's no email-verification flow (and
+      # no SMTP configured in Keycloak to send one) — without this, every
+      # login 500s with "email in id_token isn't verified".
+      OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL: "true"
     networks:
       - edge
     labels:
