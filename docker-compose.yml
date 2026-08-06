@@ -74,14 +74,27 @@ services:
       - ./secrets/dashboard.htpasswd:/etc/traefik/dashboard.htpasswd:ro
     networks:
       edge:
-        # Lets any container on this network reach our own subdomains
-        # (e.g. oauth2-proxy -> https://sso.${BASE_DOMAIN} for OIDC discovery)
-        # directly by container IP instead of hairpinning back out through
-        # the host's own NetBird interface, which times out — Docker
+        # Lets any container on this network reach any of our own subdomains
+        # directly by Traefik's container IP instead of hairpinning back out
+        # through the host's own NetBird interface, which times out — Docker
         # doesn't reliably route a container's request back to its own
-        # host's external-facing address.
+        # host's external-facing address. Hit this twice already: oauth2-proxy
+        # -> sso.${BASE_DOMAIN} for OIDC discovery, and gitlab-runner ->
+        # git.${BASE_DOMAIN} for job polling (runner sat "online" but every
+        # poll timed out after 30s — indistinguishable from the runner being
+        # dead unless you check the container's own logs). Aliasing every
+        # subdomain we route through Traefik here avoids hitting this same
+        # bug again one service at a time.
         aliases:
+          - traefik.${BASE_DOMAIN}
           - sso.${BASE_DOMAIN}
+          - git.${BASE_DOMAIN}
+          - registry.${BASE_DOMAIN}
+          - prometheus.${BASE_DOMAIN}
+          - alerts.${BASE_DOMAIN}
+          - grafana.${BASE_DOMAIN}
+          - automation.${BASE_DOMAIN}
+          - dash.${BASE_DOMAIN}
     labels:
       - traefik.enable=true
       - traefik.http.routers.traefik.rule=Host(`traefik.${BASE_DOMAIN}`)
