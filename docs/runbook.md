@@ -68,7 +68,7 @@ middleware `internal-only@file` — отвечает только пирам с�
 | 🔄 | SSH: непривилегированный пользователь + `PermitRootLogin no` — выполняется |
 | ⬜ | Cron для `scripts/backup.sh` + копирование архивов с сервера |
 | ✅ | Plane — установлен, работает за Traefik (`pm.devops.2be.az`) |
-| 🔄 | DefectDojo — установка |
+| ✅ | DefectDojo — установлен, работает за Traefik (`dojo.devops.2be.az`) |
 | ⬜ | n8n: workflow с Webhook-триггером на `/webhook/alertmanager` (иначе алерты уходят в никуда) |
 | ⬜ | Первый проект в GitLab + тестовый `.gitlab-ci.yml` |
 | ⬜ | NetBird Access Control (пока не настроено — актуально, когда подключится больше людей) |
