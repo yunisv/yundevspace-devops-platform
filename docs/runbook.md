@@ -76,7 +76,7 @@ middleware `internal-only@file` — отвечает только пирам с�
 | ✅ | GitLab-пайплайн импортирует находки SAST/secret-detection в DefectDojo |
 | ✅ | Единый вход через Keycloak — GitLab (нативный OIDC), Grafana (нативный OIDC), n8n (сторонний `n8n-oidc`, см. `docs/service-sso.md` про риски при апдейте образа) |
 | ⬜ | NetBird Access Control (пока не настроено — актуально, когда подключится больше людей) |
-| ⬜ | AI-агенты в n8n (`docs/ai-agents-roadmap.md`) — начали с пункта 2 (триаж находок DefectDojo), локальная LLM (Ollama) готова к деплою, ждём проверку свободных ресурсов сервера (`docs/local-llm.md`) |
+| 🟡 | AI-агенты в n8n (`docs/ai-agents-roadmap.md`) — пункт 2 (триаж находок DefectDojo) реализован (`docs/ai-agent-defectdojo-triage.md`), локальная LLM (Ollama, Qwen2.5 14B) развёрнута и проверена вживую (`docs/local-llm.md`); workflow готов к импорту в n8n, ждём донастройку credentials/маппинга и первый реальный прогон. Пункты 1/3/4/5 — по плану дальше. |
 
 ## Быстрые ссылки
 
