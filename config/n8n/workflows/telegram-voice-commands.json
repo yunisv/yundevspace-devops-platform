@@ -1,0 +1,155 @@
+{
+  "name": "Telegram Voice Commands",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "seconds", "secondsInterval": 30 }
+          ]
+        }
+      },
+      "id": "t1-schedule",
+      "name": "Every 30s",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1400, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nreturn [{ json: { offset: staticData.offset || 0 } }];"
+      },
+      "id": "t2-get-offset",
+      "name": "Get Offset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1180, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/bot<REDACTED-BOT-TOKEN>/getUpdates?offset={{ $json.offset }}&timeout=25",
+        "options": {
+          "timeout": 35000
+        }
+      },
+      "id": "t3-get-updates",
+      "name": "Get Updates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [-960, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// MVP: реагируем только на голосовые сообщения в нужном чате. Telegram\n// сам не отдаёт боту обычную переписку в группе (privacy mode) — сюда\n// долетают только команды/упоминания/реплаи боту, фильтр по chat_id —\n// на случай, если бота добавят ещё куда-то.\nconst result = $input.first().json.result || [];\nconst staticData = $getWorkflowStaticData('global');\nlet maxUpdateId = (staticData.offset || 1) - 1;\nconst TARGET_CHAT_ID = '-1003913344004';\nconst items = [];\nfor (const update of result) {\n  if (update.update_id > maxUpdateId) maxUpdateId = update.update_id;\n  const msg = update.message;\n  if (!msg) continue;\n  if (String(msg.chat.id) !== TARGET_CHAT_ID) continue;\n  if (!msg.voice) continue; // остальное (просто текст/фото без голоса) пока не обрабатываем\n  items.push({ json: msg });\n}\nstaticData.offset = maxUpdateId + 1;\nreturn items;"
+      },
+      "id": "t4-extract",
+      "name": "Extract Voice Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-740, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/bot<REDACTED-BOT-TOKEN>/getFile?file_id={{ $json.voice.file_id }}",
+        "options": {}
+      },
+      "id": "t5-get-file-path",
+      "name": "Get File Path",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-520, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/file/bot<REDACTED-BOT-TOKEN>/{{ $json.result.file_path }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "t6-download",
+      "name": "Download Voice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-300, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://whisper:9000/asr?output=json&language=ru",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "audio_file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "t7-whisper",
+      "name": "Whisper Transcribe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [-80, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot<REDACTED-BOT-TOKEN>/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: \"-1003913344004\", text: \"🎙 Распознано: \" + ($json.text || \"(не удалось распознать)\") }) }}",
+        "options": {}
+      },
+      "id": "t8-reply",
+      "name": "Reply in Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [140, 300]
+    }
+  ],
+  "connections": {
+    "Every 30s": {
+      "main": [[{ "node": "Get Offset", "type": "main", "index": 0 }]]
+    },
+    "Get Offset": {
+      "main": [[{ "node": "Get Updates", "type": "main", "index": 0 }]]
+    },
+    "Get Updates": {
+      "main": [[{ "node": "Extract Voice Messages", "type": "main", "index": 0 }]]
+    },
+    "Extract Voice Messages": {
+      "main": [[{ "node": "Get File Path", "type": "main", "index": 0 }]]
+    },
+    "Get File Path": {
+      "main": [[{ "node": "Download Voice", "type": "main", "index": 0 }]]
+    },
+    "Download Voice": {
+      "main": [[{ "node": "Whisper Transcribe", "type": "main", "index": 0 }]]
+    },
+    "Whisper Transcribe": {
+      "main": [[{ "node": "Reply in Telegram", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
