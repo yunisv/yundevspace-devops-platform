@@ -24,6 +24,7 @@ VCS + CI/CD + registry + SAST (через GitLab CE), управление за�
 | Мониторинг | `docker-compose.monitoring.yml` | Prometheus, Grafana, Loki, Promtail, Alertmanager, node-exporter, cAdvisor |
 | Автоматизация / AI-агенты | `docker-compose.automation.yml` | n8n |
 | Стартовая страница + SSO | `docker-compose.dashboard.yml` | Homepage, oauth2-proxy |
+| Локальный LLM для AI-агентов | `docker-compose.ollama.yml` | Ollama — см. [docs/local-llm.md](docs/local-llm.md) |
 
 Стартовая страница (`dash.`) собирает плитки сервисов **автоматически** из
 docker-лейблов `homepage.*` — добавили сервис в стек, он появился на
