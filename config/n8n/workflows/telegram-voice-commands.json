@@ -3,17 +3,30 @@
   "nodes": [
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram-poll",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "t1-webhook",
+      "name": "Poll Tick",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1400, 220]
+    },
+    {
+      "parameters": {
         "rule": {
           "interval": [
-            { "field": "seconds", "secondsInterval": 30 }
+            { "field": "seconds", "secondsInterval": 180 }
           ]
         }
       },
       "id": "t1-schedule",
-      "name": "Every 30s",
+      "name": "Safety Net Every 3min",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [-1400, 300]
+      "position": [-1400, 380]
     },
     {
       "parameters": {
@@ -114,7 +127,7 @@
         "url": "https://api.telegram.org/bot<REDACTED-BOT-TOKEN>/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: \"-1003913344004\", text: \"🎙 Распознано: \" + ($json.text || \"(не удалось распознать)\") }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: \"-1003913344004\", text: \"🎙 Распознано: \" + (JSON.parse($json.data || \"{}\").text || \"(не удалось распознать)\") }) }}",
         "options": {}
       },
       "id": "t8-reply",
@@ -122,17 +135,38 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [140, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/telegram-poll",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "t9-continue",
+      "name": "Continue Polling",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [-740, 460]
     }
   ],
   "connections": {
-    "Every 30s": {
+    "Poll Tick": {
+      "main": [[{ "node": "Get Offset", "type": "main", "index": 0 }]]
+    },
+    "Safety Net Every 3min": {
       "main": [[{ "node": "Get Offset", "type": "main", "index": 0 }]]
     },
     "Get Offset": {
       "main": [[{ "node": "Get Updates", "type": "main", "index": 0 }]]
     },
     "Get Updates": {
-      "main": [[{ "node": "Extract Voice Messages", "type": "main", "index": 0 }]]
+      "main": [[
+        { "node": "Extract Voice Messages", "type": "main", "index": 0 },
+        { "node": "Continue Polling", "type": "main", "index": 0 }
+      ]]
     },
     "Extract Voice Messages": {
       "main": [[{ "node": "Get File Path", "type": "main", "index": 0 }]]
