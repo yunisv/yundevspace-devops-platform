@@ -14,7 +14,7 @@ API), чтобы делать это одним workflow вслепую.
 
 ```
 Telegram (voice/photo/document, упоминание бота в рабочем чате)
-  → Telegram Trigger (n8n, тот же бот Alerts_TG — токен уже есть в credentials)
+  → n8n сам стучится к Telegram API раз в 30 сек (long polling, НЕ webhook)
   → скачать voice.ogg → Whisper (локально, docker-compose.whisper.yml) → текст
   → Ollama: классифицировать намерение → JSON {action, params, reply_text}
   → Switch по action:
@@ -23,6 +23,23 @@ Telegram (voice/photo/document, упоминание бота в рабочем 
        - show_dojo_report → DefectDojo API → отформатировать → отправить в чат
        - unknown          → переспросить в чат
 ```
+
+**Важно: не через нативный n8n Telegram Trigger.** Эта нода работает
+через webhook — Telegram должен сам достучаться до
+`automation.${BASE_DOMAIN}` со своих публичных серверов, а у нас весь
+входящий трафик снаружи закрыт (Hetzner Firewall deny-all inbound,
+Traefik слушает только NetBird IP) — пробивать под это дырку в файрволе
+не стали. Вместо этого — **long polling**: отдельный workflow
+(`config/n8n/workflows/telegram-voice-commands.json`) сам, по
+расписанию, стучится НАРУЖУ к `getUpdates` (это разрешено, входящих
+портов не требует). Смещение (`offset`, чтобы не обрабатывать одно и то
+же сообщение дважды) хранится в n8n workflow static data.
+
+Privacy mode бота (включён по умолчанию) сам ограничивает, что вообще
+долетает до `getUpdates` в групповом чате — только команды/упоминания/
+реплаи боту, обычную переписку Telegram даже не отдаёт. Фильтр по
+`chat_id` в workflow — просто подстраховка на случай, если бота добавят
+ещё куда-то.
 
 **Доступ**: ограничено конкретным `chat_id` — тем же рабочим чатом, куда
 уже льются алерты из Alertmanager (см. workflow `Alerts_TG`). Сообщения
@@ -52,7 +69,7 @@ WHISPER_LANG=ru
 
 12/16 ядер под AI-сервисы суммарно, 4 остаются на остальной стек.
 
-## Этап 1 (текущий): развернуть Whisper и проверить транскрипцию
+## Этап 1 (готово): развернуть Whisper и проверить транскрипцию
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gitlab.yml \
@@ -89,12 +106,46 @@ curl -s -F "audio_file=@test.ogg" \
 можно попробовать `WHISPER_MODEL=medium` (точнее, но медленнее и тяжелее
 по памяти — пересчитать `WHISPER_MEM_LIMIT`).
 
-## Этапы 2-4 (следующие)
+## Этап 2 (текущий): long polling + транскрипция голосового + эхо-ответ
 
-- **Telegram Trigger в n8n** — новый nod в существующем/новом workflow,
-  фильтр по `chat_id` и по факту упоминания бота, скачивание
-  voice/photo/document через Bot API.
-- **Ollama-роутер** — промпт на классификацию намерения в JSON.
+`config/n8n/workflows/telegram-voice-commands.json` — отдельный workflow
+(не трогает `Alerts_TG`, тот же бот): **Every 30s** → **Get Offset**
+(static data) → **Get Updates** (long poll, timeout 25с) → **Extract
+Voice Messages** (фильтр по `chat_id` + наличию `voice`, обновление
+offset) → **Get File Path** → **Download Voice** → **Whisper
+Transcribe** → **Reply in Telegram** (эхо: "🎙 Распознано: ...").
+
+Это ещё не финальная версия — просто проверка, что вся цепочка
+polling → скачивание файла → Whisper → ответ в чат реально работает,
+прежде чем добавлять Ollama-роутер и сами действия.
+
+**Импорт**: Workflows → Import from File →
+`config/n8n/workflows/telegram-voice-commands.json`, активировать
+(тумблер Active).
+
+**Две ноды, скорее всего потребуют ручной проверки** (бинарные данные
+в n8n сложнее гарантировать вслепую, чем обычный JSON, который мы
+гоняли в триаже находок):
+- **Download Voice** — должна возвращать файл как бинарные данные, не
+  как текст. Открой ноду → **Options → Response → Response Format**,
+  должно быть выставлено **File**. Если ошибка при выполнении — первым
+  делом проверить это поле.
+- **Whisper Transcribe** — отправляет бинарник как `multipart/form-data`
+  с полем `audio_file`. Открой ноду → **Body Content Type** должен быть
+  **Form-Data (Multipart)**, и там параметр типа **n8n Binary File**
+  с именем `audio_file`, ссылающийся на бинарные данные из предыдущей
+  ноды (обычно поле называется `data`).
+
+**Проверка**: отправь голосовое с упоминанием бота в рабочий чат, жди
+до ~30 сек (интервал polling) — бот должен ответить транскрипцией.
+Если тишина — смотреть **n8n → Executions**, там будет видно, на какой
+ноде остановилось (или что `Get Updates` вообще не находит новых
+сообщений — тогда проверить `chat_id`/что бот точно состоит в чате).
+
+## Этапы 3-4 (следующие)
+
+- **Ollama-роутер** — промпт на классификацию намерения в JSON,
+  вставляется между Whisper Transcribe и Reply (вместо эхо-ответа).
 - **show_dojo_report** → **trigger_pipeline** → **create_task** — по
   очереди, в этом порядке (от простого к сложному, Plane API ещё не
   трогали в этом проекте).
