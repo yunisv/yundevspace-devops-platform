@@ -19,6 +19,7 @@
 | Loki + Promtail | — (внутренние, смотреть через Grafana) | логи всех контейнеров | — | `docker-compose.monitoring.yml` |
 | node-exporter / cAdvisor | — (внутренние) | метрики хоста / метрики контейнеров | — | `docker-compose.monitoring.yml` |
 | n8n | `automation.` | автоматизация вебхуков, площадка для будущих AI-агентов | 5678 | `docker-compose.automation.yml` |
+| Ollama | — (внутренний, только для n8n) | локальный LLM для AI-агентов, без публичного роута | 11434 | `docker-compose.ollama.yml`, `docs/local-llm.md` |
 | Homepage | `dash.` | стартовая страница со всеми сервисами (auto-discovery по docker-лейблам) | 3000 | `docker-compose.dashboard.yml` |
 | oauth2-proxy | (обслуживает `dash.`) | SSO-гейт перед Homepage через Keycloak | 4180 | `docker-compose.dashboard.yml` |
 | Plane | `pm.` | issue tracking / PM | — | `docs/adding-plane.md` (официальный установщик, не наш compose) |
@@ -75,7 +76,7 @@ middleware `internal-only@file` — отвечает только пирам с�
 | ✅ | GitLab-пайплайн импортирует находки SAST/secret-detection в DefectDojo |
 | ✅ | Единый вход через Keycloak — GitLab (нативный OIDC), Grafana (нативный OIDC), n8n (сторонний `n8n-oidc`, см. `docs/service-sso.md` про риски при апдейте образа) |
 | ⬜ | NetBird Access Control (пока не настроено — актуально, когда подключится больше людей) |
-| ⬜ | AI-агенты в n8n (`docs/ai-agents-roadmap.md`) |
+| 🟡 | AI-агенты в n8n (`docs/ai-agents-roadmap.md`) — пункт 2 (триаж находок DefectDojo) реализован (`docs/ai-agent-defectdojo-triage.md`), локальная LLM (Ollama, Qwen2.5 14B) развёрнута и проверена вживую (`docs/local-llm.md`); workflow готов к импорту в n8n, ждём донастройку credentials/маппинга и первый реальный прогон. Пункты 1/3/4/5 — по плану дальше. |
 
 ## Быстрые ссылки
 
