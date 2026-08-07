@@ -72,6 +72,8 @@ middleware `internal-only@file` — отвечает только пирам с�
 | ✅ | DefectDojo — установлен, работает за Traefik (`dojo.devops.2be.az`) |
 | ✅ | n8n: workflow `Alerts_TG` (Webhook → Code → Telegram) на `/webhook/alertmanager`, проверен вживую |
 | ✅ | Первый проект в GitLab (`usta_tap`) + пайплайн реально подхвачен раннером и выполняется |
+| ✅ | GitLab-пайплайн импортирует находки SAST/secret-detection в DefectDojo |
+| ✅ | Единый вход через Keycloak — GitLab (нативный OIDC), Grafana (нативный OIDC), n8n (сторонний `n8n-oidc`, см. `docs/service-sso.md` про риски при апдейте образа) |
 | ⬜ | NetBird Access Control (пока не настроено — актуально, когда подключится больше людей) |
 | ⬜ | AI-агенты в n8n (`docs/ai-agents-roadmap.md`) |
 
