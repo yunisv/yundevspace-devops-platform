@@ -16,7 +16,8 @@ SAST/Trivy/DefectDojo) и добавляет суждение поверх ни�
    находка) → n8n → LLM оценивает эксплуатируемость/контекст (публичный
    ли эндпоинт, есть ли похожие закрытые находки) → обновляет severity/
    тэги в DefectDojo через API, при critical — создаёт issue в GitLab.
-   **Реализовано** (MVP) — `docs/ai-agent-defectdojo-triage.md`,
+   **Реализовано и проверено вживую на продакшн-сервере** —
+   `docs/ai-agent-defectdojo-triage.md`,
    `config/n8n/workflows/defectdojo-triage.json`. LLM — локальная, через
    Ollama (`docs/local-llm.md`), не сторонний API.
 3. **Gate пайплайна** — job в `.gitlab-ci.yml` отправляет summary (тесты,
