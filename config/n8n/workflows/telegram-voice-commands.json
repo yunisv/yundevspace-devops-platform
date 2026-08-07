@@ -181,7 +181,7 @@
         "url": "http://ollama:11434/api/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"qwen2.5:3b-instruct-q4_K_M\", messages: [{ role: \"user\", content: $json.prompt }], stream: false, format: \"json\" }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"qwen2.5:14b-instruct-q4_K_M\", messages: [{ role: \"user\", content: $json.prompt }], stream: false, format: \"json\" }) }}",
         "options": {
           "timeout": 600000
         }
