@@ -114,7 +114,7 @@
         "url": "https://api.telegram.org/bot8134918535:AAHacy6lYzn_1oQ1E_26D3lzWJ8VYrsBPLs/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: \"-1003913344004\", text: \"🎙 Распознано: \" + ($json.text || \"(не удалось распознать)\") }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: \"-1003913344004\", text: \"🎙 Распознано: \" + (JSON.parse($json.data || \"{}\").text || \"(не удалось распознать)\") }) }}",
         "options": {}
       },
       "id": "t8-reply",
