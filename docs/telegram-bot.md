@@ -133,9 +133,17 @@ curl -s -F "audio_file=@test.ogg" \
 и **Safety Net Every 3min** (подстраховка) → **Get Offset** (static
 data) → **Get Updates** (long poll, timeout 25с) → параллельно два
 пути: **Continue Polling** (сразу дёргает `Poll Tick` снова — цикл) и
-**Extract Voice Messages** (фильтр по `chat_id` + наличию `voice`,
-обновление offset) → **Get File Path** → **Download Voice** → **Whisper
-Transcribe** → **Reply in Telegram** (эхо: "🎙 Распознано: ...").
+**Extract Commands** (фильтр по `chat_id` + наличию `voice` ИЛИ `text`,
+обновление offset) → **Has Voice** (IF): голос → **Get File Path** →
+**Download Voice** → **Whisper Transcribe**; просто текст → **Use Text
+As Transcript** (пропускает Whisper) — обе ветки сходятся в **Reply in
+Telegram** (эхо: "✅ Принято: ...").
+
+Фото/документы без голоса или текста пока не триггерят действие — их
+Extract Commands отбрасывает. Вложения к команде понадобятся только для
+`create_task` (Этап 4), там и будут подхвачены отдельно — Telegram не
+даёт прикрепить голос+фото в одном сообщении, поэтому это не тривиальный
+довесок к текущему фильтру, а отдельная логика.
 
 Это ещё не финальная версия — просто проверка, что вся цепочка
 polling → скачивание файла → Whisper → ответ в чат реально работает,

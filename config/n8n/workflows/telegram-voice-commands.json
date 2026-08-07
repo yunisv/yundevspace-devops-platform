@@ -68,13 +68,45 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// MVP: реагируем только на голосовые сообщения в нужном чате. Telegram\n// сам не отдаёт боту обычную переписку в группе (privacy mode) — сюда\n// долетают только команды/упоминания/реплаи боту, фильтр по chat_id —\n// на случай, если бота добавят ещё куда-то.\nconst result = $input.first().json.result || [];\nconst staticData = $getWorkflowStaticData('global');\nlet maxUpdateId = (staticData.offset || 1) - 1;\nconst TARGET_CHAT_ID = '-1003913344004';\nconst items = [];\nfor (const update of result) {\n  if (update.update_id > maxUpdateId) maxUpdateId = update.update_id;\n  const msg = update.message;\n  if (!msg) continue;\n  if (String(msg.chat.id) !== TARGET_CHAT_ID) continue;\n  if (!msg.voice) continue; // остальное (просто текст/фото без голоса) пока не обрабатываем\n  items.push({ json: msg });\n}\nstaticData.offset = maxUpdateId + 1;\nreturn items;"
+        "jsCode": "// Telegram сам не отдаёт боту обычную переписку в группе (privacy\n// mode) — сюда долетают только команды/упоминания/реплаи боту, фильтр\n// по chat_id — на случай, если бота добавят ещё куда-то.\n// Голос ИЛИ текст — оба варианты команды. Фото/документы без голоса\n// или текста пока не триггерят действие сами по себе — вложения к\n// команде подхватываются отдельно на Этапе 4 (create_task), Telegram\n// не даёт прикрепить голос+фото в одном сообщении.\nconst result = $input.first().json.result || [];\nconst staticData = $getWorkflowStaticData('global');\nlet maxUpdateId = (staticData.offset || 1) - 1;\nconst TARGET_CHAT_ID = '-1003913344004';\nconst items = [];\nfor (const update of result) {\n  if (update.update_id > maxUpdateId) maxUpdateId = update.update_id;\n  const msg = update.message;\n  if (!msg) continue;\n  if (String(msg.chat.id) !== TARGET_CHAT_ID) continue;\n  if (!msg.voice && !msg.text) continue;\n  items.push({ json: msg });\n}\nstaticData.offset = maxUpdateId + 1;\nreturn items;"
       },
       "id": "t4-extract",
-      "name": "Extract Voice Messages",
+      "name": "Extract Commands",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [-740, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ !!$json.voice }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t4b-has-voice",
+      "name": "Has Voice",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-620, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Приводим к тому же виду, что отдаёт Whisper (поле data — JSON-строка\n// с полем text), чтобы Reply in Telegram работал одинаково для обеих\n// веток (голос/текст).\nreturn { json: { data: JSON.stringify({ text: $json.text }) } };"
+      },
+      "id": "t4c-text",
+      "name": "Use Text As Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-520, 460]
     },
     {
       "parameters": {
@@ -86,7 +118,7 @@
       "name": "Get File Path",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-520, 300]
+      "position": [-380, 220]
     },
     {
       "parameters": {
@@ -138,7 +170,7 @@
         "url": "https://api.telegram.org/bot<REDACTED-BOT-TOKEN>/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: \"-1003913344004\", text: \"🎙 Распознано: \" + (JSON.parse($json.data || \"{}\").text || \"(не удалось распознать)\") }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: \"-1003913344004\", text: \"✅ Принято: \" + (JSON.parse($json.data || \"{}\").text || \"(не удалось распознать)\") }) }}",
         "options": {}
       },
       "id": "t8-reply",
@@ -178,12 +210,18 @@
     },
     "Get Updates": {
       "main": [[
-        { "node": "Extract Voice Messages", "type": "main", "index": 0 },
+        { "node": "Extract Commands", "type": "main", "index": 0 },
         { "node": "Continue Polling", "type": "main", "index": 0 }
       ]]
     },
-    "Extract Voice Messages": {
-      "main": [[{ "node": "Get File Path", "type": "main", "index": 0 }]]
+    "Extract Commands": {
+      "main": [[{ "node": "Has Voice", "type": "main", "index": 0 }]]
+    },
+    "Has Voice": {
+      "main": [
+        [{ "node": "Get File Path", "type": "main", "index": 0 }],
+        [{ "node": "Use Text As Transcript", "type": "main", "index": 0 }]
+      ]
     },
     "Get File Path": {
       "main": [[{ "node": "Download Voice", "type": "main", "index": 0 }]]
@@ -192,6 +230,9 @@
       "main": [[{ "node": "Whisper Transcribe", "type": "main", "index": 0 }]]
     },
     "Whisper Transcribe": {
+      "main": [[{ "node": "Reply in Telegram", "type": "main", "index": 0 }]]
+    },
+    "Use Text As Transcript": {
       "main": [[{ "node": "Reply in Telegram", "type": "main", "index": 0 }]]
     }
   },
