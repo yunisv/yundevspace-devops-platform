@@ -455,10 +455,18 @@ module.exports = {
             // Find or create user in n8n database
             const { User, Settings, Credentials, Workflow } = this.dbCollections;
 
-            // Try to find existing user by email
+            // Try to find existing user by email.
+            // NOTE: upstream n8n-oidc queries with `relations: ['role']` and
+            // assigns `role: { slug: ... }`, matching an older n8n schema
+            // where role was a separate related entity. As of n8n 1.80.0
+            // (packages/cli/src/databases/entities/user.ts), `role` is a
+            // plain string column (GlobalRole), not a relation — the
+            // original code throws "Property 'role' was not found in
+            // 'User'" on this version. Patched to match the plain-column
+            // schema; re-check this against whatever n8n version is
+            // actually running before assuming it still applies.
             let user = await User.findOne({
               where: { email: userInfo.email },
-              relations: ['role'],
             });
 
             if (!user) {
@@ -470,7 +478,7 @@ module.exports = {
                 firstName: userInfo.given_name || userInfo.name?.split(' ')[0] || 'User',
                 lastName: userInfo.family_name || userInfo.name?.split(' ').slice(1).join(' ') || '',
                 password: crypto.randomBytes(32).toString('hex'), // Random password, can't be used
-                role: { slug: userCount === 0 ? 'global:owner' : 'global:member' },
+                role: userCount === 0 ? 'global:owner' : 'global:member',
               };
 
               // Use createUserWithProject to create both user and personal project
