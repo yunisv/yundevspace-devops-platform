@@ -1,0 +1,34 @@
+# Local speech-to-text for the Telegram voice-command bot (docs/telegram-bot.md).
+# Transcribes voice messages before n8n hands the text to Ollama for intent
+# routing — kept local for the same reason as the LLM: voice commands can
+# reference internal project/finding details, no reason to ship that to a
+# third party when the server can do it itself.
+
+# NOT external:true — see docker-compose.gitlab.yml for why.
+networks:
+  edge:
+    name: devops_edge
+
+volumes:
+  whisper-cache:
+
+services:
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    restart: unless-stopped
+    environment:
+      ASR_MODEL: ${WHISPER_MODEL:-small}
+      ASR_ENGINE: faster_whisper
+      # Russian by default — set to blank to let it auto-detect language
+      # per request instead, at a small accuracy/speed cost.
+      ASR_MODEL_LANG: ${WHISPER_LANG:-ru}
+    volumes:
+      - whisper-cache:/root/.cache
+    networks:
+      - edge
+    # Shares the host with Ollama (see docs/local-llm.md) — sized to leave
+    # both AI services able to run at once without starving GitLab/DefectDojo.
+    # If OLLAMA_CPU_LIMIT is still 12 from before this was added, drop it to
+    # 8 in .env so the two don't add up to more than ~12/16 together.
+    mem_limit: ${WHISPER_MEM_LIMIT:-4g}
+    cpus: ${WHISPER_CPU_LIMIT:-4}
