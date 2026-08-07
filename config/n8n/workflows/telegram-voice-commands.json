@@ -68,13 +68,120 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Бот в чате с правами админа — Telegram отдаёт ВСЕ сообщения, privacy\n// mode тут не фильтрует \"не для бота\" сам. Поэтому адресность проверяем\n// сами: команда обрабатывается, только если это (а) явное упоминание\n// @username с текстом, (б) реплай на сообщение бота, или (в) \"взведено\"\n// — до этого было отдельное голое упоминание \"@бот\" (голосовое физически\n// не может нести текст с упоминанием), окно 60 сек, от того же юзера.\n// Иначе — игнор, даже если это голосовое/текст в целевом чате.\nconst result = $input.first().json.result || [];\nconst staticData = $getWorkflowStaticData('global');\nlet maxUpdateId = (staticData.offset || 1) - 1;\nconst TARGET_CHAT_ID = '-1003913344004';\nconst BOT_USERNAME = 'twobedev_bot';\nconst ARM_WINDOW_MS = 60000;\nconst items = [];\nfor (const update of result) {\n  if (update.update_id > maxUpdateId) maxUpdateId = update.update_id;\n  const msg = update.message;\n  if (!msg) continue;\n  if (String(msg.chat.id) !== TARGET_CHAT_ID) continue;\n  if (!msg.voice && !msg.text) continue;\n\n  const mentionsBot = (msg.text || '').includes('@' + BOT_USERNAME);\n  const isReplyToBot = !!(msg.reply_to_message && msg.reply_to_message.from && msg.reply_to_message.from.is_bot);\n  const bareMention = mentionsBot && !msg.voice && msg.text.replace('@' + BOT_USERNAME, '').trim() === '';\n\n  if (bareMention) {\n    staticData.armedUntil = Date.now() + ARM_WINDOW_MS;\n    staticData.armedBy = msg.from.id;\n    continue; // само сообщение-взвод не обрабатываем как команду\n  }\n\n  const armed = !!(staticData.armedUntil && Date.now() < staticData.armedUntil && staticData.armedBy === msg.from.id);\n\n  if (!mentionsBot && !isReplyToBot && !armed) continue; // не адресовано боту — игнор\n\n  staticData.armedUntil = 0;\n  items.push({ json: msg });\n}\nstaticData.offset = maxUpdateId + 1;\nreturn items;"
+        "jsCode": "// Бот в чате с правами админа — Telegram отдаёт ВСЕ сообщения, privacy\n// mode тут не фильтрует \"не для бота\" сам. Три типа результата, помечены\n// _kind (поля исходного объекта сохранены как есть через spread, чтобы\n// не ломать существующие ноды типа Has Voice, которые читают $json.voice\n// напрямую):\n//   - callback_query: нажатие кнопки меню\n//   - menu_command: команда /bot (открыть меню)\n//   - command: голос/текст-команда (упоминание/реплай/взвод — как раньше)\nconst result = $input.first().json.result || [];\nconst staticData = $getWorkflowStaticData('global');\nlet maxUpdateId = (staticData.offset || 1) - 1;\nconst TARGET_CHAT_ID = '-1003913344004';\nconst BOT_USERNAME = 'twobedev_bot';\nconst ARM_WINDOW_MS = 60000;\nconst items = [];\nfor (const update of result) {\n  if (update.update_id > maxUpdateId) maxUpdateId = update.update_id;\n\n  if (update.callback_query) {\n    const cq = update.callback_query;\n    if (String(cq.message.chat.id) !== TARGET_CHAT_ID) continue;\n    items.push({ json: { _kind: 'callback_query', ...cq } });\n    continue;\n  }\n\n  const msg = update.message;\n  if (!msg) continue;\n  if (String(msg.chat.id) !== TARGET_CHAT_ID) continue;\n\n  if (msg.text && msg.text.trim() === '/bot') {\n    items.push({ json: { _kind: 'menu_command', ...msg } });\n    continue;\n  }\n\n  if (!msg.voice && !msg.text) continue;\n\n  const mentionsBot = (msg.text || '').includes('@' + BOT_USERNAME);\n  const isReplyToBot = !!(msg.reply_to_message && msg.reply_to_message.from && msg.reply_to_message.from.is_bot);\n  const bareMention = mentionsBot && !msg.voice && msg.text.replace('@' + BOT_USERNAME, '').trim() === '';\n\n  if (bareMention) {\n    staticData.armedUntil = Date.now() + ARM_WINDOW_MS;\n    staticData.armedBy = msg.from.id;\n    continue; // само сообщение-взвод не обрабатываем как команду\n  }\n\n  const armed = !!(staticData.armedUntil && Date.now() < staticData.armedUntil && staticData.armedBy === msg.from.id);\n\n  if (!mentionsBot && !isReplyToBot && !armed) continue; // не адресовано боту — игнор\n\n  staticData.armedUntil = 0;\n  items.push({ json: { _kind: 'command', ...msg } });\n}\nstaticData.offset = maxUpdateId + 1;\nreturn items;"
       },
       "id": "t4-extract",
       "name": "Extract Commands",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [-740, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json._kind }}",
+              "rightValue": "menu_command",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t4d-is-menu",
+      "name": "Is Menu Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-620, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json._kind }}",
+              "rightValue": "callback_query",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t4e-is-callback",
+      "name": "Is Callback",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-460, 100]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Роли и доступные кнопки. Заполнить реальными Telegram user ID (свой\n// и коллег): написать боту /bot один раз, свой ID увидеть в n8n\n// Executions (Extract Commands -> from.id), либо спросить у стороннего\n// бота вроде @userinfobot.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst LABELS = {\n  create_task: '📋 Создать задачу',\n  trigger_pipeline: '🚀 Поднять пайплайн',\n  show_dojo_report: '🛡 Отчёт DefectDojo',\n};\n\nconst user = USERS[$json.from.id];\nif (!user) return []; // неизвестный пользователь — молча игнорируем /bot\n\nconst actions = ROLE_ACTIONS[user.role] || [];\nconst keyboard = actions.map(a => ([{ text: LABELS[a], callback_data: 'action:' + a }]));\nreturn { json: {\n  chat_id: $json.chat.id,\n  text: `Привет, ${user.name}! Выбери действие:`,\n  keyboard\n} };"
+      },
+      "id": "t4f-build-menu",
+      "name": "Build Menu",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-300, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot<REDACTED-BOT-TOKEN>/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, text: $json.text, reply_markup: { inline_keyboard: $json.keyboard } }) }}",
+        "options": {}
+      },
+      "id": "t4g-send-menu",
+      "name": "Send Menu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-80, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot<REDACTED-BOT-TOKEN>/answerCallbackQuery?callback_query_id={{ $json.id }}",
+        "options": {}
+      },
+      "id": "t4h-answer-callback",
+      "name": "Answer Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [-300, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands.\nconst cq = $('Extract Commands').item.json;\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\n\nconst user = USERS[cq.from.id];\nconst action = (cq.data || '').replace('action:', '');\nconst allowed = user && (ROLE_ACTIONS[user.role] || []).includes(action);\n\nlet text;\nif (!allowed) {\n  text = '⛔ Нет доступа к этому действию.';\n} else {\n  // MVP-заглушка — реальные действия (create_task/trigger_pipeline/\n  // show_dojo_report) подключим следующим шагом.\n  text = `✅ Принято: ${action}. Реализация в процессе — доделаем на следующем этапе.`;\n}\nreturn { json: { chat_id: cq.message.chat.id, text } };"
+      },
+      "id": "t4i-handle-button",
+      "name": "Handle Button",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-80, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot<REDACTED-BOT-TOKEN>/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, text: $json.text }) }}",
+        "options": {}
+      },
+      "id": "t4j-reply-callback",
+      "name": "Reply Callback Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [140, 200]
     },
     {
       "parameters": {
@@ -255,7 +362,28 @@
       ]]
     },
     "Extract Commands": {
-      "main": [[{ "node": "Has Voice", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Is Menu Command", "type": "main", "index": 0 }]]
+    },
+    "Is Menu Command": {
+      "main": [
+        [{ "node": "Build Menu", "type": "main", "index": 0 }],
+        [{ "node": "Is Callback", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Callback": {
+      "main": [
+        [{ "node": "Answer Callback", "type": "main", "index": 0 }],
+        [{ "node": "Has Voice", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Menu": {
+      "main": [[{ "node": "Send Menu", "type": "main", "index": 0 }]]
+    },
+    "Answer Callback": {
+      "main": [[{ "node": "Handle Button", "type": "main", "index": 0 }]]
+    },
+    "Handle Button": {
+      "main": [[{ "node": "Reply Callback Result", "type": "main", "index": 0 }]]
     },
     "Has Voice": {
       "main": [
