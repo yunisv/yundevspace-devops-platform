@@ -81,18 +81,22 @@ docker exec -it devops-platform-ollama-1 ollama pull qwen2.5:7b-instruct-q4_K_M
 
 ## 3. Проверить
 
+`docker-compose.ollama.yml` намеренно не пробрасывает 11434 на хост (см.
+раздел 0) — поэтому `curl http://localhost:11434` с самого сервера ничего
+не найдёт, запрос никуда не долетит и упадёт молча. Проверять через
+встроенный CLI — он обращается к серверу Ollama изнутри контейнера, порт
+наружу для этого не нужен:
+
 ```bash
-curl -s http://localhost:11434/api/chat -d '{
-  "model": "qwen2.5:7b-instruct-q4_K_M",
-  "messages": [{"role": "user", "content": "Ответь одним словом: работаешь?"}],
-  "stream": false
-}' | grep -o '"content":"[^"]*"'
+docker exec -it devops-platform-ollama-1 ollama run qwen2.5:7b-instruct-q4_K_M "Ответь одним словом: работаешь?"
 ```
 
-Эта команда — с самого сервера (Ollama не проброшена наружу), но полезна,
-чтобы убедиться в работоспособности до того, как на неё будет полагаться
-n8n. Из n8n workflow — HTTP Request node, `POST http://ollama:11434/api/chat`
-(тот же JSON-body, без localhost — по имени сервиса внутри `devops_edge`).
+Первый запуск загружает модель в память (может занять минуту-полторы для
+14B) — это нормально, не признак проблемы.
+
+Из n8n workflow модель дергается иначе — HTTP Request node,
+`POST http://ollama:11434/api/chat` (по имени сервиса внутри `devops_edge`,
+n8n и Ollama сидят в одной docker-сети, порт на хосте им обоим не нужен).
 
 ## 4. Если свободной RAM не хватает
 
