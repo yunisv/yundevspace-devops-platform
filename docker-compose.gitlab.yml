@@ -54,6 +54,32 @@ services:
         # /-/metrics returns 404 unless the scraping IP is whitelisted. These
         # are the private ranges Docker allocates bridge networks from.
         gitlab_rails['monitoring_whitelist'] = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
+        # SSO via Keycloak (devops realm). Local accounts/root password
+        # keep working — omniauth_allow_single_sign_on only lets people ALSO
+        # sign in via Keycloak, it doesn't disable the normal login form.
+        gitlab_rails['omniauth_enabled'] = true
+        gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
+        gitlab_rails['omniauth_block_auto_created_users'] = false
+        gitlab_rails['omniauth_providers'] = [
+          {
+            name: "openid_connect",
+            label: "Keycloak",
+            args: {
+              name: "openid_connect",
+              scope: ["openid", "profile", "email"],
+              response_type: "code",
+              issuer: "https://sso.${BASE_DOMAIN}/realms/${KEYCLOAK_REALM}",
+              discovery: true,
+              client_auth_method: "query",
+              uid_field: "preferred_username",
+              client_options: {
+                identifier: "${GITLAB_OIDC_CLIENT_ID}",
+                secret: "${GITLAB_OIDC_CLIENT_SECRET}",
+                redirect_uri: "https://git.${BASE_DOMAIN}/users/auth/openid_connect/callback"
+              }
+            }
+          }
+        ]
     volumes:
       - gitlab-config:/etc/gitlab
       - gitlab-logs:/var/log/gitlab

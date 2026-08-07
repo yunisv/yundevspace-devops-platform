@@ -15,7 +15,11 @@ volumes:
 
 services:
   n8n:
-    image: n8nio/n8n:1.60.1
+    # Bumped from 1.60.1: the OIDC hook below needs @n8n/di and
+    # services/jwt.service.js, neither of which exist before ~1.70-1.75.
+    # Verified present at 1.80.0 directly against n8n-io/n8n's source tree
+    # before pinning here — 1.60.1 would have made the hook fail at startup.
+    image: n8nio/n8n:1.80.0
     restart: unless-stopped
     environment:
       N8N_HOST: automation.${BASE_DOMAIN}
@@ -23,12 +27,32 @@ services:
       WEBHOOK_URL: https://automation.${BASE_DOMAIN}/
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       GENERIC_TIMEZONE: Europe/Moscow
-      # No N8N_BASIC_AUTH_* here: n8n removed basic auth in 1.0 (this image is
-      # 1.60.1), so those variables are silently ignored. Access is controlled
-      # by n8n's own user management — create the owner account on first visit,
-      # and do it immediately: until you do, anyone reaching the URL can claim it.
+      # No N8N_BASIC_AUTH_* here: n8n removed basic auth in 1.0, so those
+      # variables are silently ignored. Local email/password accounts still
+      # work as a fallback — the OIDC hook below only ADDS Keycloak as a
+      # login option, it doesn't disable n8n's own user management.
+      #
+      # SSO via Keycloak (devops realm), using the third-party n8n-oidc
+      # external-hooks project (https://github.com/cweagans/n8n-oidc) since
+      # n8n Community has no free native SSO (that's Enterprise-only). Code
+      # reviewed before deploying: uses only built-in Node modules, has
+      # proper state/nonce CSRF checks, and correctly creates new OIDC users
+      # as global:member (not owner) once an owner already exists. The real
+      # risk is that it reaches into n8n's internal, undocumented module
+      # paths (DI container, JwtService) rather than a public API — a future
+      # n8n version bump can silently break login without warning, so check
+      # this hook still works before bumping the image tag again.
+      N8N_PROXY_HOPS: "1"
+      N8N_ADDITIONAL_NON_UI_ROUTES: auth
+      EXTERNAL_HOOK_FILES: /home/node/.n8n/hooks.js
+      EXTERNAL_FRONTEND_HOOKS_URLS: /assets/oidc-frontend-hook.js
+      OIDC_ISSUER_URL: https://sso.${BASE_DOMAIN}/realms/${KEYCLOAK_REALM}
+      OIDC_CLIENT_ID: ${N8N_OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${N8N_OIDC_CLIENT_SECRET}
+      OIDC_REDIRECT_URI: https://automation.${BASE_DOMAIN}/auth/oidc/callback
     volumes:
       - n8n-data:/home/node/.n8n
+      - ./config/n8n/hooks.js:/home/node/.n8n/hooks.js:ro
     networks:
       - edge
     labels:
