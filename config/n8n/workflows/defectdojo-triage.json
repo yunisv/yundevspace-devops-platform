@@ -146,7 +146,7 @@
           "combinator": "or",
           "conditions": [
             {
-              "leftValue": "={{ $json.verdict.severity }}",
+              "leftValue": "={{ $('Parse Verdict').item.json.verdict.severity }}",
               "rightValue": "Critical",
               "operator": {
                 "type": "string",
@@ -154,7 +154,7 @@
               }
             },
             {
-              "leftValue": "={{ $json.verdict.create_issue }}",
+              "leftValue": "={{ $('Parse Verdict').item.json.verdict.create_issue }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -173,7 +173,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Заполнить своим маппингом: имя продукта в DefectDojo -> numeric ID проекта в GitLab\n// (ID проекта — на странице проекта в GitLab, под названием, \"Project ID: ...\").\nconst PRODUCT_TO_PROJECT = {\n  'usta_tap': 0 // <-- заменить 0 на реальный ID\n};\nconst productName = $('Get Test ID').item.json.product_name;\nconst projectId = PRODUCT_TO_PROJECT[productName];\nif (!projectId) {\n  throw new Error(`Нет GitLab-проекта для продукта DefectDojo \"${productName}\" — добавь в PRODUCT_TO_PROJECT в этой ноде.`);\n}\nreturn [{ json: { ...$json, gitlab_project_id: projectId } }];"
+        "jsCode": "// Заполнить своим маппингом: имя продукта в DefectDojo -> numeric ID проекта в GitLab\n// (ID проекта — на странице проекта в GitLab, под названием, \"Project ID: ...\").\nconst PRODUCT_TO_PROJECT = {\n  'usta_tap': 0 // <-- заменить 0 на реальный ID\n};\nconst productName = $('Get Test ID').item.json.product_name;\nconst projectId = PRODUCT_TO_PROJECT[productName];\nif (!projectId) {\n  throw new Error(`Нет GitLab-проекта для продукта DefectDojo \"${productName}\" — добавь в PRODUCT_TO_PROJECT в этой ноде.`);\n}\n// $json здесь — ответ ноды Add Note (создание заметки), не находка с\n// вердиктом: Critical? стоит после Add Note в цепочке, и HTTP Request\n// подменяет $json своим ответом. Нужные поля — явно из Parse Verdict.\nreturn [{ json: { ...$('Parse Verdict').item.json, gitlab_project_id: projectId } }];"
       },
       "id": "n11-map-project",
       "name": "Map Product to GitLab Project",
