@@ -166,18 +166,58 @@
     },
     {
       "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const text = JSON.parse($json.data || '{}').text || '';\nconst prompt = `Ты — ассистент команды разработки, разбираешь голосовые/текстовые команды в рабочем чате и определяешь, что нужно сделать.\n\nДоступные действия:\n- create_task: создать задачу в трекере (Plane). params: {title, description}\n- trigger_pipeline: запустить CI/CD пайплайн. params: {project (имя, если названо, иначе null), branch (если названа, иначе \"main\")}\n- show_dojo_report: показать отчёт по находкам безопасности из DefectDojo. params: {product (имя, если названо, иначе null)}\n- unknown: если непонятно, что имелось в виду\n\nТекст команды: \"${text}\"\n\nОтветь ТОЛЬКО JSON, без другого текста, без markdown:\n{\"action\": \"create_task|trigger_pipeline|show_dojo_report|unknown\", \"params\": {}, \"reply_text\": \"короткое подтверждение на русском того, что ты понял, или уточняющий вопрос если unknown\"}`;\nreturn { json: { prompt, original_text: text } };"
+      },
+      "id": "t10-build-router-prompt",
+      "name": "Build Router Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [140, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"qwen2.5:14b-instruct-q4_K_M\", messages: [{ role: \"user\", content: $json.prompt }], stream: false, format: \"json\" }) }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "t11-call-router-llm",
+      "name": "Call Router LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [360, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let route;\ntry {\n  route = JSON.parse($json.message.content);\n  if (!route.action) throw new Error('no action');\n  if (!route.params) route.params = {};\n} catch (e) {\n  route = { action: 'unknown', params: {}, reply_text: 'Не понял команду, попробуй сформулировать иначе.' };\n}\nreturn { json: route };"
+      },
+      "id": "t12-parse-route",
+      "name": "Parse Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [580, 300]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://api.telegram.org/bot8134918535:AAHacy6lYzn_1oQ1E_26D3lzWJ8VYrsBPLs/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: \"-1003913344004\", text: \"✅ Принято: \" + (JSON.parse($json.data || \"{}\").text || \"(не удалось распознать)\") }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: \"-1003913344004\", text: \"🤖 \" + ($json.reply_text || \"Не понял команду\") + \"\\n\\n[action: \" + ($json.action || \"unknown\") + \"]\" }) }}",
         "options": {}
       },
       "id": "t8-reply",
       "name": "Reply in Telegram",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [140, 300]
+      "position": [800, 300]
     },
     {
       "parameters": {
@@ -230,9 +270,18 @@
       "main": [[{ "node": "Whisper Transcribe", "type": "main", "index": 0 }]]
     },
     "Whisper Transcribe": {
-      "main": [[{ "node": "Reply in Telegram", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Build Router Prompt", "type": "main", "index": 0 }]]
     },
     "Use Text As Transcript": {
+      "main": [[{ "node": "Build Router Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build Router Prompt": {
+      "main": [[{ "node": "Call Router LLM", "type": "main", "index": 0 }]]
+    },
+    "Call Router LLM": {
+      "main": [[{ "node": "Parse Route", "type": "main", "index": 0 }]]
+    },
+    "Parse Route": {
       "main": [[{ "node": "Reply in Telegram", "type": "main", "index": 0 }]]
     }
   },
