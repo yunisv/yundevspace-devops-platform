@@ -31,7 +31,18 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nreturn [{ json: { offset: staticData.offset || 0 } }];"
+        "jsCode": "// Основной цикл (Poll Tick) сам себя дёргает без пауз и обновляет\n// lastTick в Get Offset на каждой итерации (максимум раз в ~25с). Если\n// он жив — тут просто ничего не делаем, чтобы не плодить второй\n// параллельный цикл, конкурирующий за один и тот же getUpdates.\nconst staticData = $getWorkflowStaticData('global');\nconst last = staticData.lastTick || 0;\nconst alive = (Date.now() - last) < 90000;\nif (alive) return [];\nreturn [{ json: {} }];"
+      },
+      "id": "t1b-gate",
+      "name": "Safety Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1180, 420]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// lastTick — метка \"цикл жив\", проверяется в Safety Gate: пока Poll\n// Tick сам себя перезапускает без пауз, Safety Net не должен запускать\n// параллельный второй такой же цикл (Telegram разрешает только один\n// активный long-poll на бота — второй тут же обрывается конфликтом).\nconst staticData = $getWorkflowStaticData('global');\nstaticData.lastTick = Date.now();\nreturn [{ json: { offset: staticData.offset || 0 } }];"
       },
       "id": "t2-get-offset",
       "name": "Get Offset",
@@ -157,6 +168,9 @@
       "main": [[{ "node": "Get Offset", "type": "main", "index": 0 }]]
     },
     "Safety Net Every 3min": {
+      "main": [[{ "node": "Safety Gate", "type": "main", "index": 0 }]]
+    },
+    "Safety Gate": {
       "main": [[{ "node": "Get Offset", "type": "main", "index": 0 }]]
     },
     "Get Offset": {
