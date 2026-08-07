@@ -16,7 +16,8 @@
     },
     {
       "parameters": {
-        "jsCode": "// DefectDojo Notification Webhook payload. Field names below are a\n// best-effort guess (docs.defectdojo.com describes the shape but not this\n// deployment's exact version) — check the first real delivery in this\n// node's output (n8n execution history) and adjust the paths here if\n// test_id/product_name come back empty.\nconst body = $input.first().json.body ?? $input.first().json;\nconst test = body.test ?? body.data?.test ?? {};\nreturn [{\n  json: {\n    event: body.event ?? '',\n    test_id: test.id ?? test.test_id ?? body.test_id ?? null,\n    product_name: test.engagement?.product?.name ?? body.product?.name ?? ''\n  }\n}];"
+        "mode": "runOnceForEachItem",
+        "jsCode": "// DefectDojo Notification Webhook payload. Field names below are a\n// best-effort guess (docs.defectdojo.com describes the shape but not this\n// deployment's exact version) — check the first real delivery in this\n// node's output (n8n execution history) and adjust the paths here if\n// test_id/product_name come back empty.\nconst body = $json.body ?? $json;\nconst test = body.test ?? body.data?.test ?? {};\nreturn {\n  json: {\n    event: body.event ?? '',\n    test_id: test.id ?? test.test_id ?? body.test_id ?? null,\n    product_name: test.engagement?.product?.name ?? body.product?.name ?? ''\n  }\n};"
       },
       "id": "n2-parse-webhook",
       "name": "Get Test ID",
@@ -46,7 +47,8 @@
     },
     {
       "parameters": {
-        "jsCode": "// One n8n item per finding from this scan, skipping anything we already\n// triaged on a previous (re-)import — the webhook fires per scan, not per\n// finding, so re-imports of the same test would otherwise re-triage\n// everything every time.\nconst results = $input.first().json.results ?? $input.first().json.body?.results ?? [];\nreturn results\n  .filter(f => !(f.tags || []).includes('llm-triaged'))\n  .map(f => ({ json: f }));"
+        "mode": "runOnceForAllItems",
+        "jsCode": "// One n8n item per finding from this scan, skipping anything we already\n// triaged on a previous (re-)import — the webhook fires per scan, not per\n// finding, so re-imports of the same test would otherwise re-triage\n// everything every time. Deliberately Run Once for All Items — this is\n// the one node that needs to see the whole findings array at once to\n// split it into items; every Code node after it is per-item.\nconst results = $input.first().json.results ?? $input.first().json.body?.results ?? [];\nreturn results\n  .filter(f => !(f.tags || []).includes('llm-triaged'))\n  .map(f => ({ json: f }));"
       },
       "id": "n4-filter",
       "name": "Split & Filter Findings",
@@ -56,7 +58,8 @@
     },
     {
       "parameters": {
-        "jsCode": "const f = $json;\nconst prompt = `You are a security triage assistant reviewing one finding from an automated SAST/secret-detection scan.\n\nTitle: ${f.title}\nCurrent severity: ${f.severity}\nCWE: ${f.cwe || 'n/a'}\nFile: ${f.file_path || 'n/a'}:${f.line || ''}\nComponent: ${f.component_name || 'n/a'} ${f.component_version || ''}\nDescription: ${(f.description || '').slice(0, 1500)}\n\nAssess whether the severity is correct for this context, and whether it's urgent enough to open a tracked issue right now instead of waiting for normal triage.\n\nReply with ONLY a JSON object, no other text, no markdown fences:\n{\"severity\": \"Critical|High|Medium|Low|Info\", \"reasoning\": \"2-3 sentences in Russian explaining the assessment\", \"create_issue\": true|false}`;\nreturn [{ json: { ...f, prompt } }];"
+        "mode": "runOnceForEachItem",
+        "jsCode": "const f = $json;\nconst prompt = `You are a security triage assistant reviewing one finding from an automated SAST/secret-detection scan.\n\nTitle: ${f.title}\nCurrent severity: ${f.severity}\nCWE: ${f.cwe || 'n/a'}\nFile: ${f.file_path || 'n/a'}:${f.line || ''}\nComponent: ${f.component_name || 'n/a'} ${f.component_version || ''}\nDescription: ${(f.description || '').slice(0, 1500)}\n\nAssess whether the severity is correct for this context, and whether it's urgent enough to open a tracked issue right now instead of waiting for normal triage. Also write a concrete fix for THIS specific finding (not generic advice) — reference the actual file/line, and include a short corrected code snippet in the language implied by the file extension where that makes sense.\n\nReply with ONLY a JSON object, no other text, no markdown fences:\n{\"severity\": \"Critical|High|Medium|Low|Info\", \"reasoning\": \"2-3 sentences in Russian explaining the assessment\", \"create_issue\": true|false, \"mitigation\": \"Конкретный способ исправления именно этой находки на русском — 3-5 предложений и, если уместно, короткий пример исправленного кода\"}`;\nreturn { json: { ...f, prompt } };"
       },
       "id": "n5-build-prompt",
       "name": "Build Prompt",
@@ -71,17 +74,21 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ model: \"qwen2.5:14b-instruct-q4_K_M\", messages: [{ role: \"user\", content: $json.prompt }], stream: false, format: \"json\" }) }}",
-        "options": {}
+        "options": {
+          "timeout": 600000
+        }
       },
       "id": "n6-ollama",
       "name": "Call Ollama",
+      "onError": "continueRegularOutput",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [-100, 300]
     },
     {
       "parameters": {
-        "jsCode": "const finding = $('Build Prompt').item.json;\nlet verdict;\ntry {\n  verdict = JSON.parse($json.message.content);\n  if (!verdict.severity || !verdict.reasoning) throw new Error('missing fields');\n} catch (e) {\n  verdict = {\n    severity: finding.severity,\n    reasoning: 'Не удалось разобрать ответ LLM как JSON — нужна ручная проверка. Сырой ответ: ' + JSON.stringify($json).slice(0, 300),\n    create_issue: false\n  };\n}\nreturn [{ json: { ...finding, verdict } }];"
+        "mode": "runOnceForEachItem",
+        "jsCode": "const finding = $('Build Prompt').item.json;\nlet verdict;\ntry {\n  verdict = JSON.parse($json.message.content);\n  if (!verdict.severity || !verdict.reasoning) throw new Error('missing fields');\n  if (!verdict.mitigation) verdict.mitigation = 'LLM не предложила конкретное исправление — нужна ручная проверка.';\n} catch (e) {\n  verdict = {\n    severity: finding.severity,\n    reasoning: 'Не удалось разобрать ответ LLM как JSON — нужна ручная проверка. Сырой ответ: ' + JSON.stringify($json).slice(0, 300),\n    create_issue: false,\n    mitigation: 'Не удалось получить рекомендацию от LLM — нужна ручная проверка.'\n  };\n}\nreturn { json: { ...finding, verdict } };"
       },
       "id": "n7-parse-verdict",
       "name": "Parse Verdict",
@@ -120,7 +127,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ severity: $json.verdict.severity, tags: ($json.tags || []).concat(['llm-triaged']) }) }}",
+        "jsonBody": "={{ JSON.stringify({ severity: $json.verdict.severity, mitigation: \"📍 \" + ($json.file_path || \"n/a\") + \":\" + ($json.line || \"\") + \"\\n\\n\" + $json.verdict.mitigation, tags: ($json.tags || []).concat(['llm-triaged']) }) }}",
         "options": {}
       },
       "id": "n9-update-finding",
@@ -146,7 +153,7 @@
           "combinator": "or",
           "conditions": [
             {
-              "leftValue": "={{ $json.verdict.severity }}",
+              "leftValue": "={{ $('Parse Verdict').item.json.verdict.severity }}",
               "rightValue": "Critical",
               "operator": {
                 "type": "string",
@@ -154,7 +161,7 @@
               }
             },
             {
-              "leftValue": "={{ $json.verdict.create_issue }}",
+              "leftValue": "={{ $('Parse Verdict').item.json.verdict.create_issue }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -173,7 +180,8 @@
     },
     {
       "parameters": {
-        "jsCode": "// Заполнить своим маппингом: имя продукта в DefectDojo -> numeric ID проекта в GitLab\n// (ID проекта — на странице проекта в GitLab, под названием, \"Project ID: ...\").\nconst PRODUCT_TO_PROJECT = {\n  'usta_tap': 0 // <-- заменить 0 на реальный ID\n};\nconst productName = $('Get Test ID').item.json.product_name;\nconst projectId = PRODUCT_TO_PROJECT[productName];\nif (!projectId) {\n  throw new Error(`Нет GitLab-проекта для продукта DefectDojo \"${productName}\" — добавь в PRODUCT_TO_PROJECT в этой ноде.`);\n}\nreturn [{ json: { ...$json, gitlab_project_id: projectId } }];"
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Заполнить своим маппингом: имя продукта в DefectDojo -> numeric ID проекта в GitLab\n// (ID проекта — на странице проекта в GitLab, под названием, \"Project ID: ...\").\nconst PRODUCT_TO_PROJECT = {\n  'usta_tap': 0 // <-- заменить 0 на реальный ID\n};\nconst productName = $('Get Test ID').item.json.product_name;\nconst projectId = PRODUCT_TO_PROJECT[productName];\nif (!projectId) {\n  throw new Error(`Нет GitLab-проекта для продукта DefectDojo \"${productName}\" — добавь в PRODUCT_TO_PROJECT в этой ноде.`);\n}\n// $json здесь — ответ ноды Add Note (создание заметки), не находка с\n// вердиктом: Critical? стоит после Add Note в цепочке, и HTTP Request\n// подменяет $json своим ответом. Нужные поля — явно из Parse Verdict.\nreturn { json: { ...$('Parse Verdict').item.json, gitlab_project_id: projectId } };"
       },
       "id": "n11-map-project",
       "name": "Map Product to GitLab Project",
@@ -189,13 +197,14 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ title: \"🔴 [Security] \" + $json.title, description: \"Severity: \" + $json.verdict.severity + \"\\n\\n\" + $json.verdict.reasoning + \"\\n\\nDefectDojo: https://dojo.devops.2be.az/finding/\" + $json.id, labels: \"security,llm-triaged\" }) }}",
+        "jsonBody": "={{ JSON.stringify({ title: \"🔴 [Security] \" + $json.title + \" (\" + ($json.file_path || \"n/a\") + \")\", description: \"Severity: \" + $json.verdict.severity + \"\\n\\n\" + $json.verdict.reasoning + \"\\n\\nDefectDojo: https://dojo.devops.2be.az/finding/\" + $json.id, labels: \"security,llm-triaged\" }) }}",
         "options": {}
       },
       "id": "n12-create-issue",
       "name": "Create GitLab Issue",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
       "position": [1000, 200],
       "credentials": {
         "httpHeaderAuth": {
