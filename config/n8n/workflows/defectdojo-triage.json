@@ -74,10 +74,13 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ model: \"qwen2.5:14b-instruct-q4_K_M\", messages: [{ role: \"user\", content: $json.prompt }], stream: false, format: \"json\" }) }}",
-        "options": {}
+        "options": {
+          "timeout": 600000
+        }
       },
       "id": "n6-ollama",
       "name": "Call Ollama",
+      "onError": "continueRegularOutput",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [-100, 300]
@@ -194,13 +197,14 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ title: \"🔴 [Security] \" + $json.title, description: \"Severity: \" + $json.verdict.severity + \"\\n\\n\" + $json.verdict.reasoning + \"\\n\\nDefectDojo: https://dojo.devops.2be.az/finding/\" + $json.id, labels: \"security,llm-triaged\" }) }}",
+        "jsonBody": "={{ JSON.stringify({ title: \"🔴 [Security] \" + $json.title + \" (\" + ($json.file_path || \"n/a\") + \")\", description: \"Severity: \" + $json.verdict.severity + \"\\n\\n\" + $json.verdict.reasoning + \"\\n\\nDefectDojo: https://dojo.devops.2be.az/finding/\" + $json.id, labels: \"security,llm-triaged\" }) }}",
         "options": {}
       },
       "id": "n12-create-issue",
       "name": "Create GitLab Issue",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
       "position": [1000, 200],
       "credentials": {
         "httpHeaderAuth": {
