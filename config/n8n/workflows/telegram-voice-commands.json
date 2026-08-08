@@ -160,13 +160,119 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands. Проверка прав теперь\n// централизована в Authorize & Route (общая и для кнопок, и для LLM-\n// роутера) — тут только достаём action/параметры.\n// Два вида callback_data: \"action:X\" (нажали пункт меню) и\n// \"product:X:Y\" (ответили на вопрос \"какой продукт\" для действия X,\n// продукт Y) — см. Authorize & Route, ветка ask_product.\nconst cq = $('Extract Commands').item.json;\nconst data = cq.data || '';\nif (data.startsWith('product:')) {\n  const [, pendingAction, product] = data.split(':');\n  return { json: { action: pendingAction, params: { product } } };\n}\nreturn { json: { action: data.replace('action:', ''), params: {} } };"
+        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands.\n// Четыре вида callback_data:\n//   action:X        — нажали пункт меню (идёт через Authorize & Route,\n//                      проверка прав)\n//   product:X:Y      — ответили на вопрос \"какой продукт\" для действия X\n//   severity:P:S      — выбрали категорию severity S в отчёте по продукту P\n//                      (drill-down внутри уже разрешённого show_dojo_report,\n//                      повторно права не проверяем)\n//   finding:ID       — выбрали конкретную находку из списка\nconst cq = $('Extract Commands').item.json;\nconst data = cq.data || '';\nif (data.startsWith('product:')) {\n  const [, pendingAction, product] = data.split(':');\n  return { json: { kind: 'action', action: pendingAction, params: { product } } };\n}\nif (data.startsWith('severity:')) {\n  const [, product, severity] = data.split(':');\n  return { json: { kind: 'severity', product, severity } };\n}\nif (data.startsWith('finding:')) {\n  const [, findingId] = data.split(':');\n  return { json: { kind: 'finding', findingId } };\n}\nreturn { json: { kind: 'action', action: data.replace('action:', ''), params: {} } };"
       },
       "id": "t4i-handle-button",
       "name": "Handle Button",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [-80, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "severity",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t4k-is-severity",
+      "name": "Is Severity Drilldown",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [140, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "finding",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t4l-is-finding",
+      "name": "Is Finding Detail",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [140, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dojo.devops.2be.az/api/v2/findings/?test__engagement__product__name={{ $json.product }}&severity={{ $json.severity }}&active=true&duplicate=false&limit=20",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "t4m-get-by-severity",
+      "name": "Get Findings By Severity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [360, 40],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "DefectDojo API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $('Handle Button').item.json;\nconst chatId = $('Extract Commands').item.json.message.chat.id;\nconst findings = $json.results || [];\nconst total = $json.count ?? findings.length;\nconst EMOJI = { Critical: '🔴', High: '🟠', Medium: '🟡', Low: '🔵', Info: '⚪' };\nif (findings.length === 0) {\n  return { json: { chat_id: chatId, text: `${EMOJI[ctx.severity] || ''} ${ctx.severity} — ${ctx.product}: открытых находок нет.` } };\n}\nconst text = `${EMOJI[ctx.severity] || ''} ${ctx.severity} — ${ctx.product} (показано ${findings.length} из ${total}):`;\nconst keyboard = findings.map(f => ([{ text: (f.title || 'Без названия').slice(0, 60), callback_data: 'finding:' + f.id }]));\nreturn { json: { chat_id: chatId, text, keyboard } };"
+      },
+      "id": "t4n-format-severity-list",
+      "name": "Format Findings List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [580, 40]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dojo.devops.2be.az/api/v2/findings/{{ $json.findingId }}/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "t4o-get-finding",
+      "name": "Get Finding Detail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [360, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "DefectDojo API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const f = $json;\nconst chatId = $('Extract Commands').item.json.message.chat.id;\nconst EMOJI = { Critical: '🔴', High: '🟠', Medium: '🟡', Low: '🔵', Info: '⚪' };\nif (!f || !f.id) {\n  return { json: { chat_id: chatId, text: 'Не удалось получить находку — возможно, она была удалена.' } };\n}\nconst lines = [`${EMOJI[f.severity] || ''} ${f.title}`, `Severity: ${f.severity}`];\nif (f.cwe) lines.push(`CWE: ${f.cwe}`);\nif (f.file_path) lines.push(`Файл: ${f.file_path}:${f.line || ''}`);\nlines.push(`Дата: ${f.date || 'n/a'}`);\nlines.push('');\nlines.push('Описание:');\nlines.push((f.description || '(нет)').slice(0, 800));\nlines.push('');\nlines.push('Митигация:');\nlines.push((f.mitigation || '(нет)').slice(0, 800));\nlines.push('');\nlines.push(`https://dojo.devops.2be.az/finding/${f.id}`);\nreturn { json: { chat_id: chatId, text: lines.join('\\n') } };"
+      },
+      "id": "t4p-format-finding",
+      "name": "Format Finding Detail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [580, 320]
     },
     {
       "parameters": {
@@ -388,7 +494,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const ctx = $('Authorize & Route').item.json;\nconst findings = $json.results || [];\nconst counts = { Critical: 0, High: 0, Medium: 0, Low: 0, Info: 0 };\nfor (const f of findings) {\n  if (counts[f.severity] !== undefined) counts[f.severity]++;\n}\nconst text = `🛡 Отчёт DefectDojo (${ctx.product}), открытые находки:\\n\\nCritical: ${counts.Critical}\\nHigh: ${counts.High}\\nMedium: ${counts.Medium}\\nLow: ${counts.Low}\\nInfo: ${counts.Info}\\n\\nВсего: ${findings.length}\\nhttps://dojo.devops.2be.az/finding`;\nreturn { json: {\n  chat_id: ctx.chat_id,\n  text\n} };"
+        "jsCode": "const ctx = $('Authorize & Route').item.json;\nconst findings = $json.results || [];\nconst counts = { Critical: 0, High: 0, Medium: 0, Low: 0, Info: 0 };\nfor (const f of findings) {\n  if (counts[f.severity] !== undefined) counts[f.severity]++;\n}\nconst text = `🛡 Отчёт DefectDojo (${ctx.product}), открытые находки:\\n\\nCritical: ${counts.Critical}\\nHigh: ${counts.High}\\nMedium: ${counts.Medium}\\nLow: ${counts.Low}\\nInfo: ${counts.Info}\\n\\nВсего: ${findings.length}\\n\\nВыбери категорию, чтобы увидеть список:`;\nconst EMOJI = { Critical: '🔴', High: '🟠', Medium: '🟡', Low: '🔵', Info: '⚪' };\nconst keyboard = Object.entries(counts)\n  .filter(([, n]) => n > 0)\n  .map(([sev, n]) => ([{ text: `${EMOJI[sev]} ${sev} (${n})`, callback_data: `severity:${ctx.product}:${sev}` }]));\nreturn { json: {\n  chat_id: ctx.chat_id,\n  text,\n  keyboard\n} };"
       },
       "id": "t16-format-report",
       "name": "Format Report",
@@ -402,7 +508,7 @@
         "url": "https://api.telegram.org/bot<REDACTED-BOT-TOKEN>/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, text: $json.text }) }}",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ chat_id: $json.chat_id, text: $json.text }, $json.keyboard ? { reply_markup: { inline_keyboard: $json.keyboard } } : {})) }}",
         "options": {}
       },
       "id": "t17-send-reply",
@@ -468,7 +574,31 @@
       "main": [[{ "node": "Handle Button", "type": "main", "index": 0 }]]
     },
     "Handle Button": {
-      "main": [[{ "node": "Authorize & Route", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Is Severity Drilldown", "type": "main", "index": 0 }]]
+    },
+    "Is Severity Drilldown": {
+      "main": [
+        [{ "node": "Get Findings By Severity", "type": "main", "index": 0 }],
+        [{ "node": "Is Finding Detail", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Finding Detail": {
+      "main": [
+        [{ "node": "Get Finding Detail", "type": "main", "index": 0 }],
+        [{ "node": "Authorize & Route", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Findings By Severity": {
+      "main": [[{ "node": "Format Findings List", "type": "main", "index": 0 }]]
+    },
+    "Format Findings List": {
+      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
+    },
+    "Get Finding Detail": {
+      "main": [[{ "node": "Format Finding Detail", "type": "main", "index": 0 }]]
+    },
+    "Format Finding Detail": {
+      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
     },
     "Has Voice": {
       "main": [
