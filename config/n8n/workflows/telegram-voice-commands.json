@@ -160,7 +160,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands. Проверка прав теперь\n// централизована в Authorize & Route (общая и для кнопок, и для LLM-\n// роутера) — тут только достаём action.\nconst cq = $('Extract Commands').item.json;\nconst action = (cq.data || '').replace('action:', '');\nreturn { json: { action, params: {} } };"
+        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands. Проверка прав теперь\n// централизована в Authorize & Route (общая и для кнопок, и для LLM-\n// роутера) — тут только достаём action/параметры.\n// Два вида callback_data: \"action:X\" (нажали пункт меню) и\n// \"product:X:Y\" (ответили на вопрос \"какой продукт\" для действия X,\n// продукт Y) — см. Authorize & Route, ветка ask_product.\nconst cq = $('Extract Commands').item.json;\nconst data = cq.data || '';\nif (data.startsWith('product:')) {\n  const [, pendingAction, product] = data.split(':');\n  return { json: { action: pendingAction, params: { product } } };\n}\nreturn { json: { action: data.replace('action:', ''), params: {} } };"
       },
       "id": "t4i-handle-button",
       "name": "Handle Button",
@@ -299,7 +299,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Общая точка для обоих входов (голос/текст через Parse Route, кнопки\n// через Handle Button) — единая проверка прав по роли, дальше единый\n// роутинг по action. chat_id берём из исходного апдейта (Extract\n// Commands), а не из $json — он тут уже результат Parse Route/Handle\n// Button, там chat нет.\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.chat ? orig.chat.id : orig.message.chat.id;\nconst userId = orig.from.id;\n\n// Третья копия USERS/ROLE_ACTIONS (см. Build Menu, Handle Button) —\n// синхронизировать руками при добавлении людей.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst NOT_YET_IMPLEMENTED = {\n  trigger_pipeline: '🚀 Поднять пайплайн — реализация в процессе, доделаем следующим шагом.',\n  create_task: '📋 Создать задачу — реализация в процессе, доделаем следующим шагом.',\n};\n\nconst user = USERS[userId];\nconst action = $json.action;\nconst allowed = user && (ROLE_ACTIONS[user.role] || []).includes(action);\n\nif (!allowed) {\n  return { json: { route: 'denied', chat_id: chatId, text: '⛔ Нет доступа к этому действию.' } };\n}\nif (action === 'show_dojo_report') {\n  return { json: { route: 'show_dojo_report', chat_id: chatId } };\n}\nif (NOT_YET_IMPLEMENTED[action]) {\n  return { json: { route: action, chat_id: chatId, text: NOT_YET_IMPLEMENTED[action] } };\n}\nreturn { json: { route: 'unknown', chat_id: chatId, text: '🤖 ' + ($json.reply_text || 'Не понял команду.') } };"
+        "jsCode": "// Общая точка для обоих входов (голос/текст через Parse Route, кнопки\n// через Handle Button) — единая проверка прав по роли, дальше единый\n// роутинг по action. chat_id берём из исходного апдейта (Extract\n// Commands), а не из $json — он тут уже результат Parse Route/Handle\n// Button, там chat нет.\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.chat ? orig.chat.id : orig.message.chat.id;\nconst userId = orig.from.id;\n\n// Третья копия USERS/ROLE_ACTIONS (см. Build Menu, Handle Button) —\n// синхронизировать руками при добавлении людей.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst NOT_YET_IMPLEMENTED = {\n  trigger_pipeline: '🚀 Поднять пайплайн — реализация в процессе, доделаем следующим шагом.',\n  create_task: '📋 Создать задачу — реализация в процессе, доделаем следующим шагом.',\n};\n// Продукты в DefectDojo — добавлять сюда по мере появления новых.\nconst PRODUCTS = ['usta_tap'];\n\nconst user = USERS[userId];\nconst action = $json.action;\nconst allowed = user && (ROLE_ACTIONS[user.role] || []).includes(action);\n\nif (!allowed) {\n  return { json: { route: 'denied', chat_id: chatId, text: '⛔ Нет доступа к этому действию.' } };\n}\nif (action === 'show_dojo_report') {\n  const requested = ($json.params && $json.params.product) || null;\n  if (PRODUCTS.length === 1) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: PRODUCTS[0] } };\n  }\n  if (requested && PRODUCTS.includes(requested)) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: requested } };\n  }\n  // Несколько продуктов, и не ясно (или неверно понято), какой именно —\n  // спрашиваем кнопками. callback_data: product:<action>:<product>,\n  // разбирается в Handle Button.\n  const keyboard = PRODUCTS.map(p => ([{ text: p, callback_data: 'product:' + action + ':' + p }]));\n  return { json: { route: 'ask_product', chat_id: chatId, keyboard } };\n}\nif (NOT_YET_IMPLEMENTED[action]) {\n  return { json: { route: action, chat_id: chatId, text: NOT_YET_IMPLEMENTED[action] } };\n}\nreturn { json: { route: 'unknown', chat_id: chatId, text: '🤖 ' + ($json.reply_text || 'Не понял команду.') } };"
       },
       "id": "t13-authorize-route",
       "name": "Authorize & Route",
@@ -326,12 +326,48 @@
       "name": "Route: Show Dojo Report?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1020, 250]
+      "position": [1020, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "ask_product",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t14b-is-ask-product",
+      "name": "Route: Ask Product?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1020, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot8134918535:AAHacy6lYzn_1oQ1E_26D3lzWJ8VYrsBPLs/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, text: 'По какому продукту?', reply_markup: { inline_keyboard: $json.keyboard } }) }}",
+        "options": {}
+      },
+      "id": "t14c-send-product-picker",
+      "name": "Send Product Picker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1240, 460]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "https://dojo.devops.2be.az/api/v2/findings/?test__engagement__product__name=usta_tap&active=true&duplicate=false&limit=100",
+        "url": "=https://dojo.devops.2be.az/api/v2/findings/?test__engagement__product__name={{ $json.product }}&active=true&duplicate=false&limit=100",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
@@ -352,7 +388,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const findings = $json.results || [];\nconst counts = { Critical: 0, High: 0, Medium: 0, Low: 0, Info: 0 };\nfor (const f of findings) {\n  if (counts[f.severity] !== undefined) counts[f.severity]++;\n}\nconst text = `🛡 Отчёт DefectDojo (usta_tap), открытые находки:\\n\\nCritical: ${counts.Critical}\\nHigh: ${counts.High}\\nMedium: ${counts.Medium}\\nLow: ${counts.Low}\\nInfo: ${counts.Info}\\n\\nВсего: ${findings.length}\\nhttps://dojo.devops.2be.az/finding`;\nreturn { json: {\n  chat_id: $('Authorize & Route').item.json.chat_id,\n  text\n} };"
+        "jsCode": "const ctx = $('Authorize & Route').item.json;\nconst findings = $json.results || [];\nconst counts = { Critical: 0, High: 0, Medium: 0, Low: 0, Info: 0 };\nfor (const f of findings) {\n  if (counts[f.severity] !== undefined) counts[f.severity]++;\n}\nconst text = `🛡 Отчёт DefectDojo (${ctx.product}), открытые находки:\\n\\nCritical: ${counts.Critical}\\nHigh: ${counts.High}\\nMedium: ${counts.Medium}\\nLow: ${counts.Low}\\nInfo: ${counts.Info}\\n\\nВсего: ${findings.length}\\nhttps://dojo.devops.2be.az/finding`;\nreturn { json: {\n  chat_id: ctx.chat_id,\n  text\n} };"
       },
       "id": "t16-format-report",
       "name": "Format Report",
@@ -467,6 +503,12 @@
     "Route: Show Dojo Report?": {
       "main": [
         [{ "node": "Get Dojo Findings", "type": "main", "index": 0 }],
+        [{ "node": "Route: Ask Product?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route: Ask Product?": {
+      "main": [
+        [{ "node": "Send Product Picker", "type": "main", "index": 0 }],
         [{ "node": "Send Reply", "type": "main", "index": 0 }]
       ]
     },

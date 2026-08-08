@@ -271,20 +271,28 @@ Button`) теперь сходятся в одной ноде — `Authorize & R
 месте для обоих путей: `Authorize & Route` берёт исходного
 отправителя из `Extract Commands` (chat_id + user_id — по-разному для
 `command`/`menu_command` (`orig.chat.id`) и `callback_query`
-(`orig.message.chat.id`)), смотрит роль в **третьей** копии
-`USERS`/`ROLE_ACTIONS` (да, теперь их три — в `Build Menu`, `Handle
-Button`, `Authorize & Route` — синхронизировать руками, см. Этап 2).
+(`orig.message.chat.id`)), смотрит роль в своей копии
+`USERS`/`ROLE_ACTIONS` (эта же таблица ещё в `Build Menu` — две копии,
+не три: `Handle Button` прав больше не проверяет, синхронизировать
+`Build Menu`/`Authorize & Route` руками, см. Этап 2).
 
-Дальше — маршрутизация по `action` (нода `Route: Show Dojo Report?`,
-пока единственная реальная ветка):
+Дальше — маршрутизация по `action`:
 
-- **`show_dojo_report`** — реализовано: **Get Dojo Findings** (API
-  DefectDojo, продукт `usta_tap` захардкожен — единственный известный
-  пока, см. `product_name`/`test__engagement__product__name` в фильтре
-  запроса) → **Format Report** (считает находки по severity) →
-  **Send Reply**. Credential — `DefectDojo API` (тот же, что в
-  `defectdojo-triage.json` — привяжется по имени, но проверить в UI
-  после импорта на всякий случай, как раньше с триажем).
+- **`show_dojo_report`** — реализовано, включая выбор продукта на
+  будущее: список продуктов — `PRODUCTS` в `Authorize & Route` (сейчас
+  `['usta_tap']`, добавлять новые сюда). Если продукт один — сразу к
+  отчёту, никакого лишнего шага. Если продуктов больше одного — либо
+  берётся `params.product`, который уже сейчас извлекает LLM-роутер из
+  фразы ("покажи отчёт по X"), либо (не распознан/не назван, или пришли
+  с кнопки) — **Send Product Picker** показывает кнопки с продуктами
+  (`callback_data: product:<action>:<product>`, разбирается в `Handle
+  Button` — там теперь два вида callback_data: `action:...` и
+  `product:...`). Дальше — **Get Dojo Findings** (API DefectDojo, URL
+  теперь с динамическим `test__engagement__product__name`) → **Format
+  Report** (считает находки по severity) → **Send Reply**. Credential —
+  `DefectDojo API` (тот же, что в `defectdojo-triage.json` — привяжется
+  по имени, но проверить в UI после импорта на всякий случай, как
+  раньше с триажем).
 - **`trigger_pipeline`**, **`create_task`** — пока заглушка
   ("реализация в процессе"), доступ уже проверяется (роль должна
   позволять), просто действие ещё не выполняется реально.
@@ -297,8 +305,8 @@ Button`, `Authorize & Route` — синхронизировать руками, 
 `defectdojo-triage.json`), затем `create_task` (Plane API — ещё не
 трогали; на кнопках потребует доп. шаг — выбор исполнителя кнопками из
 `USERS`, затем текст названия — многошаговый диалог через workflow
-static data, как `armedUntil`/`armedBy` сейчас). Вложения (фото/
-документы) к `create_task` — отдельная логика, см. примечание в
-Этапе 2.
+static data, как `armedUntil`/`armedBy` сейчас — тем же способом, что
+теперь и выбор продукта). Вложения (фото/документы) к `create_task` —
+отдельная логика, см. примечание в Этапе 2.
 
 Будет дополняться по мере прохождения этапов.
