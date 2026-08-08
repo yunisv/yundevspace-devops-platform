@@ -330,12 +330,24 @@ API Plane — новый `/api/v1/.../work-items/` (не устаревший `/
    static data `pendingTasks[userId] = { title: null, project: null,
    assignee: null }`, роутит на `create_task_pick_project`.
 2. **List Plane Projects** (`GET
-   /api/v1/workspaces/2be/projects/`) → **Build Project Picker** —
-   сохраняет список в `pendingTasks[userId].projectChoices` и строит
-   кнопки. Важно: `callback_data` несёт не сам ID проекта (UUID, не
-   влезет в лимит Telegram в 64 байта на кнопку), а **индекс** в этом
-   списке (`planeproj:<idx>`) — сам ID достаётся из static data при
+   /api/v1/workspaces/2be/projects/?per_page=8&cursor=...`) → **Build
+   Project Picker** — сохраняет список текущей страницы в
+   `pendingTasks[userId].projectChoices` и строит кнопки. Важно:
+   `callback_data` несёт не сам ID проекта (UUID, не влезет в лимит
+   Telegram в 64 байта на кнопку), а **индекс** в списке текущей
+   страницы (`planeproj:<idx>`) — сам ID достаётся из static data при
    нажатии.
+
+   **Пагинация** — Plane отдаёт курсорную (`next_cursor`/`prev_cursor`/
+   `next_page_results`/`prev_page_results`), не offset-based. Если
+   проектов больше 8 — снизу добавляется строка кнопок "◀️ Назад" /
+   "Дальше ▶️" (`callback_data: planeprojpage:<cursor>` — курсор Plane
+   сам может содержать двоеточия, поэтому `Handle Button` берёт всё
+   после префикса целиком, не через `split(':')`). Нажатие идёт в
+   `Is Plane Project Page` → напрямую в тот же `List Plane Projects` с
+   новым курсором, минуя `Authorize & Route` (та же логика, что у
+   drill-down в отчёте DefectDojo — навигация внутри уже разрешённого
+   действия, повторно права не проверяются).
 3. Нажатие → `Handle Button` (`kind: 'plane_project_pick'`) → **Handle
    Project Pick** — сохраняет выбранный проект, строит кнопки
    исполнителей из таблицы `USERS` (та же, что для ролей/меню —

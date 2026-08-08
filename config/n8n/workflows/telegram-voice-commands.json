@@ -160,7 +160,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands.\n// Виды callback_data:\n//   action:X         — нажали пункт меню (идёт через Authorize & Route,\n//                       проверка прав)\n//   product:X:Y       — ответили на вопрос \"какой продукт\" для действия X\n//   severity:P:S       — выбрали категорию severity S в отчёте по продукту P\n//                       (drill-down внутри уже разрешённого show_dojo_report,\n//                       повторно права не проверяем)\n//   finding:ID        — выбрали конкретную находку из списка\n//   planeproj:IDX      — выбрали проект Plane (IDX — индекс в списке,\n//                       не сам ID — тот слишком длинный для callback_data)\n//   planeassignee:TGID — выбрали исполнителя (TGID — Telegram id из USERS)\nconst cq = $('Extract Commands').item.json;\nconst data = cq.data || '';\nif (data.startsWith('product:')) {\n  const [, pendingAction, product] = data.split(':');\n  return { json: { kind: 'action', action: pendingAction, params: { product } } };\n}\nif (data.startsWith('severity:')) {\n  const [, product, severity] = data.split(':');\n  return { json: { kind: 'severity', product, severity } };\n}\nif (data.startsWith('finding:')) {\n  const [, findingId] = data.split(':');\n  return { json: { kind: 'finding', findingId } };\n}\nif (data.startsWith('planeproj:')) {\n  return { json: { kind: 'plane_project_pick', idx: parseInt(data.split(':')[1], 10) } };\n}\nif (data.startsWith('planeassignee:')) {\n  return { json: { kind: 'plane_assignee_pick', tgId: data.split(':')[1] } };\n}\nreturn { json: { kind: 'action', action: data.replace('action:', ''), params: {} } };"
+        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands.\n// Виды callback_data:\n//   action:X         — нажали пункт меню (идёт через Authorize & Route,\n//                       проверка прав)\n//   product:X:Y       — ответили на вопрос \"какой продукт\" для действия X\n//   severity:P:S       — выбрали категорию severity S в отчёте по продукту P\n//                       (drill-down внутри уже разрешённого show_dojo_report,\n//                       повторно права не проверяем)\n//   finding:ID        — выбрали конкретную находку из списка\n//   planeproj:IDX      — выбрали проект Plane (IDX — индекс в списке,\n//                       не сам ID — тот слишком длинный для callback_data)\n//   planeassignee:TGID — выбрали исполнителя (TGID — Telegram id из USERS)\nconst cq = $('Extract Commands').item.json;\nconst data = cq.data || '';\nif (data.startsWith('product:')) {\n  const [, pendingAction, product] = data.split(':');\n  return { json: { kind: 'action', action: pendingAction, params: { product } } };\n}\nif (data.startsWith('severity:')) {\n  const [, product, severity] = data.split(':');\n  return { json: { kind: 'severity', product, severity } };\n}\nif (data.startsWith('finding:')) {\n  const [, findingId] = data.split(':');\n  return { json: { kind: 'finding', findingId } };\n}\nif (data.startsWith('planeprojpage:')) {\n  // Курсор Plane сам может содержать двоеточия (\"20:1:0\") — брать всё\n  // после префикса целиком, не через split(':').\n  return { json: { kind: 'plane_project_page', cursor: data.slice('planeprojpage:'.length) } };\n}\nif (data.startsWith('planeproj:')) {\n  return { json: { kind: 'plane_project_pick', idx: parseInt(data.split(':')[1], 10) } };\n}\nif (data.startsWith('planeassignee:')) {\n  return { json: { kind: 'plane_assignee_pick', tgId: data.split(':')[1] } };\n}\nreturn { json: { kind: 'action', action: data.replace('action:', ''), params: {} } };"
       },
       "id": "t4i-handle-button",
       "name": "Handle Button",
@@ -630,8 +630,29 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "plane_project_page",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t26-is-project-page",
+      "name": "Is Plane Project Page",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [140, 780]
+    },
+    {
+      "parameters": {
         "method": "GET",
-        "url": "https://pm.devops.2be.az/api/v1/workspaces/2be/projects/",
+        "url": "=https://pm.devops.2be.az/api/v1/workspaces/2be/projects/?per_page=8{{ $json.cursor ? ('&cursor=' + $json.cursor) : '' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
@@ -652,7 +673,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const ctx = $('Authorize & Route').item.json;\nconst userId = $('Extract Commands').item.json.from.id;\nconst staticData = $getWorkflowStaticData('global');\nconst raw = $json.results || $json || [];\nconst projects = (Array.isArray(raw) ? raw : []).map(p => ({ id: p.id, name: p.name }));\nif (projects.length === 0) {\n  return { json: { chat_id: ctx.chat_id, text: 'В Plane нет ни одного проекта — сначала создай проект в самом Plane.' } };\n}\nstaticData.pendingTasks[userId].projectChoices = projects;\nconst keyboard = projects.map((p, i) => ([{ text: p.name, callback_data: 'planeproj:' + i }]));\nreturn { json: { chat_id: ctx.chat_id, text: 'Выбери проект:', keyboard } };"
+        "jsCode": "// chat_id/userId — единообразно из Extract Commands, а не из\n// Authorize & Route: сюда попадают и первый заход (через Authorize &\n// Route), и клики \"Дальше/Назад\" (через Is Plane Project Page,\n// Authorize & Route в этой ветке не участвует).\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.message ? orig.message.chat.id : orig.chat.id;\nconst userId = orig.from.id;\nconst staticData = $getWorkflowStaticData('global');\nconst results = $json.results || [];\nconst projects = results.map(p => ({ id: p.id, name: p.name }));\nif (projects.length === 0) {\n  return { json: { chat_id: chatId, text: 'В Plane нет ни одного проекта — сначала создай проект в самом Plane.' } };\n}\nstaticData.pendingTasks[userId].projectChoices = projects;\nconst keyboard = projects.map((p, i) => ([{ text: p.name, callback_data: 'planeproj:' + i }]));\nconst navRow = [];\nif ($json.prev_page_results && $json.prev_cursor) {\n  navRow.push({ text: '◀️ Назад', callback_data: 'planeprojpage:' + $json.prev_cursor });\n}\nif ($json.next_page_results && $json.next_cursor) {\n  navRow.push({ text: 'Дальше ▶️', callback_data: 'planeprojpage:' + $json.next_cursor });\n}\nif (navRow.length > 0) keyboard.push(navRow);\nconst pageInfo = $json.total_pages ? ` (стр. из ${$json.total_pages})` : '';\nreturn { json: { chat_id: chatId, text: 'Выбери проект' + pageInfo + ':', keyboard } };"
       },
       "id": "t20-build-project-picker",
       "name": "Build Project Picker",
@@ -802,6 +823,12 @@
     "Is Plane Assignee Pick": {
       "main": [
         [{ "node": "Handle Assignee Pick", "type": "main", "index": 0 }],
+        [{ "node": "Is Plane Project Page", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Plane Project Page": {
+      "main": [
+        [{ "node": "List Plane Projects", "type": "main", "index": 0 }],
         [{ "node": "Authorize & Route", "type": "main", "index": 0 }]
       ]
     },
