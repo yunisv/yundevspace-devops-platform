@@ -160,28 +160,13 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands.\nconst cq = $('Extract Commands').item.json;\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\n\nconst user = USERS[cq.from.id];\nconst action = (cq.data || '').replace('action:', '');\nconst allowed = user && (ROLE_ACTIONS[user.role] || []).includes(action);\n\nlet text;\nif (!allowed) {\n  text = '⛔ Нет доступа к этому действию.';\n} else {\n  // MVP-заглушка — реальные действия (create_task/trigger_pipeline/\n  // show_dojo_report) подключим следующим шагом.\n  text = `✅ Принято: ${action}. Реализация в процессе — доделаем на следующем этапе.`;\n}\nreturn { json: { chat_id: cq.message.chat.id, text } };"
+        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands. Проверка прав теперь\n// централизована в Authorize & Route (общая и для кнопок, и для LLM-\n// роутера) — тут только достаём action.\nconst cq = $('Extract Commands').item.json;\nconst action = (cq.data || '').replace('action:', '');\nreturn { json: { action, params: {} } };"
       },
       "id": "t4i-handle-button",
       "name": "Handle Button",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [-80, 200]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.telegram.org/bot8134918535:AAHacy6lYzn_1oQ1E_26D3lzWJ8VYrsBPLs/sendMessage",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, text: $json.text }) }}",
-        "options": {}
-      },
-      "id": "t4j-reply-callback",
-      "name": "Reply Callback Result",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [140, 200]
     },
     {
       "parameters": {
@@ -313,18 +298,82 @@
     },
     {
       "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Общая точка для обоих входов (голос/текст через Parse Route, кнопки\n// через Handle Button) — единая проверка прав по роли, дальше единый\n// роутинг по action. chat_id берём из исходного апдейта (Extract\n// Commands), а не из $json — он тут уже результат Parse Route/Handle\n// Button, там chat нет.\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.chat ? orig.chat.id : orig.message.chat.id;\nconst userId = orig.from.id;\n\n// Третья копия USERS/ROLE_ACTIONS (см. Build Menu, Handle Button) —\n// синхронизировать руками при добавлении людей.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst NOT_YET_IMPLEMENTED = {\n  trigger_pipeline: '🚀 Поднять пайплайн — реализация в процессе, доделаем следующим шагом.',\n  create_task: '📋 Создать задачу — реализация в процессе, доделаем следующим шагом.',\n};\n\nconst user = USERS[userId];\nconst action = $json.action;\nconst allowed = user && (ROLE_ACTIONS[user.role] || []).includes(action);\n\nif (!allowed) {\n  return { json: { route: 'denied', chat_id: chatId, text: '⛔ Нет доступа к этому действию.' } };\n}\nif (action === 'show_dojo_report') {\n  return { json: { route: 'show_dojo_report', chat_id: chatId } };\n}\nif (NOT_YET_IMPLEMENTED[action]) {\n  return { json: { route: action, chat_id: chatId, text: NOT_YET_IMPLEMENTED[action] } };\n}\nreturn { json: { route: 'unknown', chat_id: chatId, text: '🤖 ' + ($json.reply_text || 'Не понял команду.') } };"
+      },
+      "id": "t13-authorize-route",
+      "name": "Authorize & Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 250]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "show_dojo_report",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t14-is-dojo-report",
+      "name": "Route: Show Dojo Report?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1020, 250]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dojo.devops.2be.az/api/v2/findings/?test__engagement__product__name=usta_tap&active=true&duplicate=false&limit=100",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "t15-get-dojo-findings",
+      "name": "Get Dojo Findings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [1240, 160],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "DefectDojo API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const findings = $json.results || [];\nconst counts = { Critical: 0, High: 0, Medium: 0, Low: 0, Info: 0 };\nfor (const f of findings) {\n  if (counts[f.severity] !== undefined) counts[f.severity]++;\n}\nconst text = `🛡 Отчёт DefectDojo (usta_tap), открытые находки:\\n\\nCritical: ${counts.Critical}\\nHigh: ${counts.High}\\nMedium: ${counts.Medium}\\nLow: ${counts.Low}\\nInfo: ${counts.Info}\\n\\nВсего: ${findings.length}\\nhttps://dojo.devops.2be.az/finding`;\nreturn { json: {\n  chat_id: $('Authorize & Route').item.json.chat_id,\n  text\n} };"
+      },
+      "id": "t16-format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1460, 160]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://api.telegram.org/bot8134918535:AAHacy6lYzn_1oQ1E_26D3lzWJ8VYrsBPLs/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $('Extract Commands').item.json.chat.id, text: \"🤖 \" + ($json.reply_text || \"Не понял команду\") + \"\\n\\n[action: \" + ($json.action || \"unknown\") + \"]\" }) }}",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $json.chat_id, text: $json.text }) }}",
         "options": {}
       },
-      "id": "t8-reply",
-      "name": "Reply in Telegram",
+      "id": "t17-send-reply",
+      "name": "Send Reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [800, 300]
+      "position": [1460, 340]
     },
     {
       "parameters": {
@@ -383,7 +432,7 @@
       "main": [[{ "node": "Handle Button", "type": "main", "index": 0 }]]
     },
     "Handle Button": {
-      "main": [[{ "node": "Reply Callback Result", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Authorize & Route", "type": "main", "index": 0 }]]
     },
     "Has Voice": {
       "main": [
@@ -410,7 +459,22 @@
       "main": [[{ "node": "Parse Route", "type": "main", "index": 0 }]]
     },
     "Parse Route": {
-      "main": [[{ "node": "Reply in Telegram", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Authorize & Route", "type": "main", "index": 0 }]]
+    },
+    "Authorize & Route": {
+      "main": [[{ "node": "Route: Show Dojo Report?", "type": "main", "index": 0 }]]
+    },
+    "Route: Show Dojo Report?": {
+      "main": [
+        [{ "node": "Get Dojo Findings", "type": "main", "index": 0 }],
+        [{ "node": "Send Reply", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Dojo Findings": {
+      "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]]
+    },
+    "Format Report": {
+      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
     }
   },
   "active": false,
