@@ -192,7 +192,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands.\n// Виды callback_data:\n//   action:X         — нажали пункт меню (идёт через Authorize & Route,\n//                       проверка прав)\n//   product:X:Y       — ответили на вопрос \"какой продукт\" для действия X\n//   severity:P:S       — выбрали категорию severity S в отчёте по продукту P\n//                       (drill-down внутри уже разрешённого show_dojo_report,\n//                       повторно права не проверяем)\n//   finding:ID        — выбрали конкретную находку из списка\n//   planeproj:IDX      — выбрали проект Plane (IDX — индекс в списке,\n//                       не сам ID — тот слишком длинный для callback_data)\n//   planeassignee:TGID — выбрали исполнителя (TGID — Telegram id из USERS)\nconst cq = $('Extract Commands').item.json;\nconst data = cq.data || '';\nif (data.startsWith('product:')) {\n  const [, pendingAction, product] = data.split(':');\n  return { json: { kind: 'action', action: pendingAction, params: { product } } };\n}\nif (data.startsWith('severity:')) {\n  const [, product, severity] = data.split(':');\n  return { json: { kind: 'severity', product, severity } };\n}\nif (data.startsWith('finding:')) {\n  const [, findingId] = data.split(':');\n  return { json: { kind: 'finding', findingId } };\n}\nif (data.startsWith('planeprojpage:')) {\n  // Курсор Plane сам может содержать двоеточия (\"20:1:0\") — брать всё\n  // после префикса целиком, не через split(':').\n  return { json: { kind: 'plane_project_page', cursor: data.slice('planeprojpage:'.length) } };\n}\nif (data.startsWith('planeproj:')) {\n  return { json: { kind: 'plane_project_pick', idx: parseInt(data.split(':')[1], 10) } };\n}\nif (data.startsWith('planeassignee:')) {\n  return { json: { kind: 'plane_assignee_pick', tgId: data.split(':')[1] } };\n}\nreturn { json: { kind: 'action', action: data.replace('action:', ''), params: {} } };"
+        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands.\n// Виды callback_data:\n//   action:X         — нажали пункт меню (идёт через Authorize & Route,\n//                       проверка прав)\n//   product:X:Y       — ответили на вопрос \"какой продукт\" для действия X\n//   severity:P:S       — выбрали категорию severity S в отчёте по продукту P\n//                       (drill-down внутри уже разрешённого show_dojo_report,\n//                       повторно права не проверяем)\n//   finding:ID        — выбрали конкретную находку из списка\n//   planeproj:IDX      — выбрали проект Plane (IDX — индекс в списке,\n//                       не сам ID — тот слишком длинный для callback_data)\n//   planeassignee:TGID — выбрали исполнителя (TGID — Telegram id из USERS)\n//   gitlabproj:IDX      — выбрали проект GitLab для trigger_pipeline (тот\n//                       же индексный трюк, что и с planeproj)\n//   gitlabprojpage:N    — навигация по страницам списка проектов GitLab\n//                       (тут просто номер страницы, не курсор как у Plane)\nconst cq = $('Extract Commands').item.json;\nconst data = cq.data || '';\nif (data.startsWith('product:')) {\n  const [, pendingAction, product] = data.split(':');\n  return { json: { kind: 'action', action: pendingAction, params: { product } } };\n}\nif (data.startsWith('severity:')) {\n  const [, product, severity] = data.split(':');\n  return { json: { kind: 'severity', product, severity } };\n}\nif (data.startsWith('finding:')) {\n  const [, findingId] = data.split(':');\n  return { json: { kind: 'finding', findingId } };\n}\nif (data.startsWith('planeprojpage:')) {\n  // Курсор Plane сам может содержать двоеточия (\"20:1:0\") — брать всё\n  // после префикса целиком, не через split(':').\n  return { json: { kind: 'plane_project_page', cursor: data.slice('planeprojpage:'.length) } };\n}\nif (data.startsWith('planeproj:')) {\n  return { json: { kind: 'plane_project_pick', idx: parseInt(data.split(':')[1], 10) } };\n}\nif (data.startsWith('planeassignee:')) {\n  return { json: { kind: 'plane_assignee_pick', tgId: data.split(':')[1] } };\n}\nif (data.startsWith('gitlabprojpage:')) {\n  return { json: { kind: 'gitlab_project_page', page: parseInt(data.slice('gitlabprojpage:'.length), 10) } };\n}\nif (data.startsWith('gitlabproj:')) {\n  return { json: { kind: 'gitlab_project_pick', idx: parseInt(data.split(':')[1], 10) } };\n}\nreturn { json: { kind: 'action', action: data.replace('action:', ''), params: {} } };"
       },
       "id": "t4i-handle-button",
       "name": "Handle Button",
@@ -622,7 +622,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Общая точка для обоих входов (голос/текст через Parse Route, кнопки\n// через Handle Button) — единая проверка прав по роли, дальше единый\n// роутинг по action. chat_id берём из исходного апдейта (Extract\n// Commands), а не из $json — он тут уже результат Parse Route/Handle\n// Button, там chat нет.\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.chat ? orig.chat.id : orig.message.chat.id;\nconst userId = orig.from.id;\n\n// Третья копия USERS/ROLE_ACTIONS (см. Build Menu, Handle Button) —\n// синхронизировать руками при добавлении людей.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', planeUserId: '' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst NOT_YET_IMPLEMENTED = {\n  trigger_pipeline: '🚀 Поднять пайплайн — реализация в процессе, доделаем следующим шагом.',\n};\n// Продукты в DefectDojo — добавлять сюда по мере появления новых.\nconst PRODUCTS = ['usta_tap'];\n\nconst user = USERS[userId];\nconst action = $json.action;\nconst allowed = user && (ROLE_ACTIONS[user.role] || []).includes(action);\n\nif (!allowed) {\n  return { json: { route: 'denied', chat_id: chatId, text: '⛔ Нет доступа к этому действию.' } };\n}\nif (action === 'show_dojo_report') {\n  const requested = ($json.params && $json.params.product) || null;\n  if (PRODUCTS.length === 1) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: PRODUCTS[0] } };\n  }\n  if (requested && PRODUCTS.includes(requested)) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: requested } };\n  }\n  // Несколько продуктов, и не ясно (или неверно понято), какой именно —\n  // спрашиваем кнопками. callback_data: product:<action>:<product>,\n  // разбирается в Handle Button.\n  const keyboard = PRODUCTS.map(p => ([{ text: p, callback_data: 'product:' + action + ':' + p }]));\n  return { json: { route: 'ask_product', chat_id: chatId, keyboard } };\n}\nif (action === 'create_task') {\n  const staticData = $getWorkflowStaticData('global');\n  staticData.pendingTasks = staticData.pendingTasks || {};\n  staticData.pendingTasks[userId] = { title: null, project: null, assignee: null };\n  return { json: { route: 'create_task_pick_project', chat_id: chatId } };\n}\nif (NOT_YET_IMPLEMENTED[action]) {\n  return { json: { route: action, chat_id: chatId, text: NOT_YET_IMPLEMENTED[action] } };\n}\nreturn { json: { route: 'unknown', chat_id: chatId, text: '🤖 ' + ($json.reply_text || 'Не понял команду.') } };"
+        "jsCode": "// Общая точка для обоих входов (голос/текст через Parse Route, кнопки\n// через Handle Button) — единая проверка прав по роли, дальше единый\n// роутинг по action. chat_id берём из исходного апдейта (Extract\n// Commands), а не из $json — он тут уже результат Parse Route/Handle\n// Button, там chat нет.\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.chat ? orig.chat.id : orig.message.chat.id;\nconst userId = orig.from.id;\n\n// Третья копия USERS/ROLE_ACTIONS (см. Build Menu, Handle Button) —\n// синхронизировать руками при добавлении людей.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', planeUserId: '' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst NOT_YET_IMPLEMENTED = {};\n// Продукты в DefectDojo — добавлять сюда по мере появления новых.\nconst PRODUCTS = ['usta_tap'];\n\nconst user = USERS[userId];\nconst action = $json.action;\nconst allowed = user && (ROLE_ACTIONS[user.role] || []).includes(action);\n\nif (!allowed) {\n  return { json: { route: 'denied', chat_id: chatId, text: '⛔ Нет доступа к этому действию.' } };\n}\nif (action === 'show_dojo_report') {\n  const requested = ($json.params && $json.params.product) || null;\n  if (PRODUCTS.length === 1) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: PRODUCTS[0] } };\n  }\n  if (requested && PRODUCTS.includes(requested)) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: requested } };\n  }\n  // Несколько продуктов, и не ясно (или неверно понято), какой именно —\n  // спрашиваем кнопками. callback_data: product:<action>:<product>,\n  // разбирается в Handle Button.\n  const keyboard = PRODUCTS.map(p => ([{ text: p, callback_data: 'product:' + action + ':' + p }]));\n  return { json: { route: 'ask_product', chat_id: chatId, keyboard } };\n}\nif (action === 'create_task') {\n  const staticData = $getWorkflowStaticData('global');\n  staticData.pendingTasks = staticData.pendingTasks || {};\n  staticData.pendingTasks[userId] = { title: null, project: null, assignee: null };\n  return { json: { route: 'create_task_pick_project', chat_id: chatId } };\n}\nif (action === 'trigger_pipeline') {\n  const staticData = $getWorkflowStaticData('global');\n  staticData.pendingPipelines = staticData.pendingPipelines || {};\n  staticData.pendingPipelines[userId] = { project: null };\n  return { json: { route: 'trigger_pipeline_pick_project', chat_id: chatId, page: 1 } };\n}\nif (NOT_YET_IMPLEMENTED[action]) {\n  return { json: { route: action, chat_id: chatId, text: NOT_YET_IMPLEMENTED[action] } };\n}\nreturn { json: { route: 'unknown', chat_id: chatId, text: '🤖 ' + ($json.reply_text || 'Не понял команду.') } };"
       },
       "id": "t13-authorize-route",
       "name": "Authorize & Route",
@@ -700,6 +700,27 @@
           "combinator": "and",
           "conditions": [
             {
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "trigger_pipeline_pick_project",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t41-is-trigger-pipeline",
+      "name": "Route: Trigger Pipeline?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1020, 780]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
               "leftValue": "={{ $json.kind }}",
               "rightValue": "plane_project_page",
               "operator": { "type": "string", "operation": "equals" }
@@ -713,6 +734,144 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [140, 780]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "gitlab_project_pick",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t33-is-gitlab-project-pick",
+      "name": "Is GitLab Project Pick",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [140, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "gitlab_project_page",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t34-is-gitlab-project-page",
+      "name": "Is GitLab Project Page",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [140, 1020]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const orig = $('Extract Commands').item.json;\nconst userId = orig.from.id;\nconst chatId = orig.message.chat.id;\nconst staticData = $getWorkflowStaticData('global');\nconst pending = staticData.pendingPipelines && staticData.pendingPipelines[userId];\nif (!pending || !pending.projectChoices) {\n  return { json: { ready: false, chat_id: chatId, text: 'Сессия запуска пайплайна истекла — начни заново через /bot.' } };\n}\nconst project = pending.projectChoices[$json.idx];\nif (!project) {\n  return { json: { ready: false, chat_id: chatId, text: 'Не удалось определить проект — начни заново через /bot.' } };\n}\ndelete staticData.pendingPipelines[userId];\nreturn { json: { ready: true, chat_id: chatId, projectId: project.id, projectName: project.name, ref: project.default_branch || 'main' } };"
+      },
+      "id": "t35-handle-gitlab-project-pick",
+      "name": "Handle GitLab Project Pick",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 900]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ready }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t36-gitlab-pick-ready",
+      "name": "GitLab Project Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [580, 900]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://git.devops.2be.az/api/v4/projects/{{ $json.projectId }}/pipeline?ref={{ $json.ref }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "t37-trigger-gitlab-pipeline",
+      "name": "Trigger GitLab Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [800, 860],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "GitLab API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ctx = $('Handle GitLab Project Pick').item.json;\nconst created = $json;\nconst text = created && created.id\n  ? `🚀 Пайплайн запущен: ${ctx.projectName}\\nВетка: ${ctx.ref}\\nСтатус: ${created.status}\\n${created.web_url}`\n  : `⚠️ Не удалось запустить пайплайн для ${ctx.projectName} — проверь credential/права (нужен минимум Developer в GitLab-проекте) и попробуй ещё раз через /bot.`;\nreturn { json: { chat_id: ctx.chat_id, text } };"
+      },
+      "id": "t38-report-pipeline-triggered",
+      "name": "Report Pipeline Triggered",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 860]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://git.devops.2be.az/api/v4/projects?membership=true&order_by=name&per_page=8&page={{ $json.page || 1 }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "t39-list-gitlab-projects",
+      "name": "List GitLab Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [1240, 900],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "GitLab API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// GitLab /projects отдаёт голый JSON-массив (в отличие от DefectDojo и\n// Plane, у которых {results: [...]}), поэтому n8n разбивает ответ на\n// отдельные item'ы сам — тут не одна находка $json, а N item'ов, по\n// одному проекту в каждом. Номер страницы — не из тела ответа (GitLab\n// отдаёт пагинацию только в заголовках), а из ноды-инициатора: либо\n// Authorize & Route (первый заход, page:1), либо Handle Button (клик\n// Дальше/Назад, page:N).\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.message ? orig.message.chat.id : orig.chat.id;\nconst userId = orig.from.id;\nlet page = 1;\nfor (const nodeName of ['Handle Button', 'Authorize & Route']) {\n  try {\n    const v = $(nodeName).first().json.page;\n    if (v) { page = v; break; }\n  } catch (e) {}\n}\nconst items = $input.all();\nconst projects = items\n  .filter(i => i.json && i.json.id)\n  .map(i => ({ id: i.json.id, name: i.json.name, default_branch: i.json.default_branch }));\nconst staticData = $getWorkflowStaticData('global');\nstaticData.pendingPipelines = staticData.pendingPipelines || {};\nstaticData.pendingPipelines[userId] = { projectChoices: projects };\nif (projects.length === 0) {\n  return { json: { chat_id: chatId, text: page > 1 ? 'Дальше проектов нет.' : 'В GitLab нет доступных проектов (или у токена бота нет к ним доступа).' } };\n}\nconst keyboard = projects.map((p, i) => ([{ text: p.name, callback_data: 'gitlabproj:' + i }]));\nconst navRow = [];\nif (page > 1) navRow.push({ text: '◀️ Назад', callback_data: 'gitlabprojpage:' + (page - 1) });\nif (projects.length === 8) navRow.push({ text: 'Дальше ▶️', callback_data: 'gitlabprojpage:' + (page + 1) });\nif (navRow.length > 0) keyboard.push(navRow);\nreturn { json: { chat_id: chatId, text: `Выбери проект (стр. ${page}):`, keyboard } };"
+      },
+      "id": "t40-build-gitlab-project-picker",
+      "name": "Build GitLab Project Picker",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1460, 900]
     },
     {
       "parameters": {
@@ -903,8 +1062,41 @@
     "Is Plane Project Page": {
       "main": [
         [{ "node": "List Plane Projects", "type": "main", "index": 0 }],
+        [{ "node": "Is GitLab Project Pick", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is GitLab Project Pick": {
+      "main": [
+        [{ "node": "Handle GitLab Project Pick", "type": "main", "index": 0 }],
+        [{ "node": "Is GitLab Project Page", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is GitLab Project Page": {
+      "main": [
+        [{ "node": "List GitLab Projects", "type": "main", "index": 0 }],
         [{ "node": "Authorize & Route", "type": "main", "index": 0 }]
       ]
+    },
+    "Handle GitLab Project Pick": {
+      "main": [[{ "node": "GitLab Project Ready?", "type": "main", "index": 0 }]]
+    },
+    "GitLab Project Ready?": {
+      "main": [
+        [{ "node": "Trigger GitLab Pipeline", "type": "main", "index": 0 }],
+        [{ "node": "Send Reply", "type": "main", "index": 0 }]
+      ]
+    },
+    "Trigger GitLab Pipeline": {
+      "main": [[{ "node": "Report Pipeline Triggered", "type": "main", "index": 0 }]]
+    },
+    "Report Pipeline Triggered": {
+      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
+    },
+    "List GitLab Projects": {
+      "main": [[{ "node": "Build GitLab Project Picker", "type": "main", "index": 0 }]]
+    },
+    "Build GitLab Project Picker": {
+      "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
     },
     "Handle Project Pick": {
       "main": [[{ "node": "Send Reply", "type": "main", "index": 0 }]]
@@ -999,6 +1191,12 @@
     "Route: Create Task?": {
       "main": [
         [{ "node": "List Plane Projects", "type": "main", "index": 0 }],
+        [{ "node": "Route: Trigger Pipeline?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route: Trigger Pipeline?": {
+      "main": [
+        [{ "node": "List GitLab Projects", "type": "main", "index": 0 }],
         [{ "node": "Send Reply", "type": "main", "index": 0 }]
       ]
     },

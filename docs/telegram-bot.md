@@ -428,7 +428,77 @@ Plane (получить credentials на загрузку → залить фа�
 **Обязательно перед использованием**: вписать `PLANE_TOKEN` в ноде
 `Upload Attachments to Plane`.
 
-**Дальше**: `trigger_pipeline` (GitLab API — знакомо по
-`defectdojo-triage.json`).
+## Этап 7 (готово): trigger_pipeline — запуск пайплайна GitLab
+
+### Почему без отдельного инструмента (исследование)
+
+Перед реализацией смотрели, есть ли готовое решение (в т.ч. платное),
+которое (а) само определяет стек проекта и (б) умеет запускать
+downstream-пайплайны. Вывод: не нужно, оба свойства уже бесплатно есть
+в самом GitLab CE, который и так лежит в основе стека:
+
+- **Автоопределение стека** → [GitLab Auto DevOps](https://docs.gitlab.com/ee/topics/autodevops/)
+  — доступен в self-hosted CE (не Enterprise-only), включается
+  `include: - template: Auto-DevOps.gitlab-ci.yml` на проекте/группе/
+  инстансе. Определяет язык через Cloud Native Buildpacks/Herokuish по
+  файлам-маркерам (`package.json`, `requirements.txt`, `go.mod`,
+  `pom.xml` и т.д.), покрывает Node/Python/Ruby/Go/Java/PHP/Scala/
+  Clojure. Переопределяется через `BUILDPACK_URL` или `.buildpacks` в
+  конкретном проекте, если автодетект ошибся.
+- **Downstream pipelines** → нативный `trigger:`-job в GitLab CI
+  (`strategy: depend`/`mirror`, pipeline trigger token как CI/CD
+  переменная, у инициатора должен быть Developer+ на целевом проекте).
+  Это и вызывает бот — `POST /api/v4/projects/:id/pipeline?ref=...`.
+- Смотрели платные варианты (Buildkite $30/user/мес, Harness CI —
+  от нескольких тысяч $/год, GitLab Duo Pro/Enterprise $19–39/user/мес
+  поверх платной лицензии Premium/Ultimate) — ни один не даёт
+  автодетект+downstream лучше, чем то, что уже бесплатно в CE, а
+  Buildkite/Harness вообще требуют увести оркестрацию из GitLab CI.
+  Если понадобится автодетект гибче Buildpacks — есть OSS-альтернативы
+  без доп. затрат: [Nixpacks](https://nixpacks.com/) или
+  [Paketo Buildpacks](https://paketo.io/), оба можно воткнуть отдельным
+  job в `.gitlab-ci.yml` для конкретных проектов.
+
+Отдельно (не в этом боте, руками на сервере): включить Auto DevOps на
+реальных проектах, где это подойдёт.
+
+### Что сделал бот
+
+Кнопка «🚀 Поднять пайплайн» (только у роли `admin`, см.
+`ROLE_ACTIONS`) → тот же паттерн динамического пагинированного
+пикера, что и у Plane-проектов в `create_task`, только без шага
+названия/исполнителя — сразу после выбора проекта пайплайн
+запускается:
+
+- **Route: Trigger Pipeline?** (в `Authorize & Route`, action
+  `trigger_pipeline`) — заводит `pendingPipelines[userId]`, роутит на
+  `trigger_pipeline_pick_project` с `page: 1`.
+- **List GitLab Projects** — `GET /api/v4/projects?membership=true&per_page=8&page=N`.
+  В отличие от DefectDojo/Plane, GitLab отдаёт **голый JSON-массив**
+  (не `{results: [...]}`), поэтому n8n сам раскладывает ответ на N
+  отдельных item'ов — `Build GitLab Project Picker` работает в режиме
+  `runOnceForAllItems` и собирает их обратно через `$input.all()`.
+  Номер страницы GitLab отдаёт только в заголовках ответа — не стали
+  включать `fullResponse`, вместо этого просто передаём номер страницы
+  явно через `page` в исходном item'е (из `Authorize & Route` при
+  первом заходе, из `Handle Button` при клике «Дальше/Назад»),
+  доставая его через `$('Handle Button').first()` /
+  `$('Authorize & Route').first()` с fallback на `page: 1`. «Дальше»
+  показывается эвристикой `projects.length === 8` (пришла полная
+  страница — вероятно, есть ещё), без отдельного запроса за total.
+- **Handle GitLab Project Pick** → сразу **Trigger GitLab Pipeline**
+  (`POST /api/v4/projects/:id/pipeline?ref=<default_branch проекта>`,
+  credential `GitLab API` — та же, что уже используется в
+  `defectdojo-triage.json` для создания issue, ничего нового заводить
+  не пришлось) → **Report Pipeline Triggered** — ссылка на пайплайн и
+  статус.
+- Ветка/ref пока фиксированная — `default_branch` проекта из ответа
+  GitLab API, без отдельного шага выбора ветки (можно добавить по
+  аналогии с шагом выбора исполнителя в `create_task`, если понадобится).
+
+**Обязательно перед использованием**: credential `GitLab API` в n8n
+должен существовать (создать вручную: header `PRIVATE-TOKEN`, значение
+— Personal/Project Access Token с правами `api`, у пользователя должен
+быть Developer+ на тех проектах, куда бот будет пускать пайплайны).
 
 Будет дополняться по мере прохождения этапов.
