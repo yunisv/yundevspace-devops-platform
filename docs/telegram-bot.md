@@ -285,14 +285,28 @@ Button`) теперь сходятся в одной ноде — `Authorize & R
   берётся `params.product`, который уже сейчас извлекает LLM-роутер из
   фразы ("покажи отчёт по X"), либо (не распознан/не назван, или пришли
   с кнопки) — **Send Product Picker** показывает кнопки с продуктами
-  (`callback_data: product:<action>:<product>`, разбирается в `Handle
-  Button` — там теперь два вида callback_data: `action:...` и
-  `product:...`). Дальше — **Get Dojo Findings** (API DefectDojo, URL
-  теперь с динамическим `test__engagement__product__name`) → **Format
-  Report** (считает находки по severity) → **Send Reply**. Credential —
-  `DefectDojo API` (тот же, что в `defectdojo-triage.json` — привяжется
-  по имени, но проверить в UI после импорта на всякий случай, как
-  раньше с триажем).
+  (`callback_data: product:<action>:<product>`). Дальше — **Get Dojo
+  Findings** (API DefectDojo, URL с динамическим
+  `test__engagement__product__name`) → **Format Report** (считает
+  находки по severity) → **Send Reply**. Credential — `DefectDojo API`
+  (тот же, что в `defectdojo-triage.json` — привяжется по имени, но
+  проверить в UI после импорта на всякий случай, как раньше с триажем).
+
+  **Drill-down в самом отчёте**: `Format Report` добавляет к сообщению
+  кнопки по каждой непустой категории severity (`callback_data:
+  severity:<product>:<severity>`). Нажатие → **Get Findings By
+  Severity** → **Format Findings List** — список находок этой
+  категории кнопками (`callback_data: finding:<id>`, заголовок
+  обрезан до 60 символов, показывает первые 20). Нажатие на находку →
+  **Get Finding Detail** (`GET /api/v2/findings/{id}/`) → **Format
+  Finding Detail** — полное описание, митигация, CWE, файл:строка,
+  дата, ссылка на находку в самом DefectDojo. Оба списка (severity)
+  и находки — навигация внутри уже разрешённого `show_dojo_report`,
+  права повторно не проверяются (см. `Handle Button` — `kind:
+  'severity'|'finding'` идёт мимо `Authorize & Route` напрямую в
+  соответствующую цепочку). `Send Reply` теперь умеет прикладывать
+  клавиатуру, если она есть в `$json.keyboard` — общий узел для всех
+  ответов (с кнопками и без).
 - **`trigger_pipeline`**, **`create_task`** — пока заглушка
   ("реализация в процессе"), доступ уже проверяется (роль должна
   позволять), просто действие ещё не выполняется реально.
