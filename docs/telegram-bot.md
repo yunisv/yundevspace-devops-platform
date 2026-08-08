@@ -307,20 +307,70 @@ Button`) теперь сходятся в одной ноде — `Authorize & R
   соответствующую цепочку). `Send Reply` теперь умеет прикладывать
   клавиатуру, если она есть в `$json.keyboard` — общий узел для всех
   ответов (с кнопками и без).
-- **`trigger_pipeline`**, **`create_task`** — пока заглушка
-  ("реализация в процессе"), доступ уже проверяется (роль должна
-  позволять), просто действие ещё не выполняется реально.
+- **`trigger_pipeline`** — пока заглушка ("реализация в процессе"),
+  доступ уже проверяется, просто действие ещё не выполняется реально.
 - Отказ в доступе (`route: 'denied'`) и нераспознанный LLM-ответ
   (`route: 'unknown'`) — тоже идут через `Send Reply`, без отдельных
   ответных нод (были `Reply in Telegram`/`Reply Callback Result` —
   убраны, вместо них один общий `Send Reply`).
+- **`create_task`** — реализовано, см. Этап 5 ниже.
+
+## Этап 5 (текущее): create_task — Plane, мульти-проект, без вложений
+
+API Plane — новый `/api/v1/.../work-items/` (не устаревший `/issues/`),
+авторизация заголовком `X-API-Key`. Список проектов **не** захардкожен
+(в отличие от `PRODUCTS` для DefectDojo) — их может быть много, поэтому
+получаем живым запросом к API в момент создания задачи, а не держим
+статический список.
+
+**Флоу** (одинаковый что через кнопку "Создать задачу", что голосом/
+текстом — оба сходятся в `Authorize & Route`):
+
+1. `Authorize & Route`, `action === 'create_task'` → заводит в workflow
+   static data `pendingTasks[userId] = { title: null, project: null,
+   assignee: null }`, роутит на `create_task_pick_project`.
+2. **List Plane Projects** (`GET
+   /api/v1/workspaces/2be/projects/`) → **Build Project Picker** —
+   сохраняет список в `pendingTasks[userId].projectChoices` и строит
+   кнопки. Важно: `callback_data` несёт не сам ID проекта (UUID, не
+   влезет в лимит Telegram в 64 байта на кнопку), а **индекс** в этом
+   списке (`planeproj:<idx>`) — сам ID достаётся из static data при
+   нажатии.
+3. Нажатие → `Handle Button` (`kind: 'plane_project_pick'`) → **Handle
+   Project Pick** — сохраняет выбранный проект, строит кнопки
+   исполнителей из таблицы `USERS` (та же, что для ролей/меню —
+   **четвёртая** копия, теперь с полем `planeUserId`).
+4. Нажатие → **Handle Assignee Pick** — сохраняет исполнителя,
+   взводит `staticData.awaitingTitleFor = {userId, expiresAt}` (5 минут)
+   и просит название.
+5. Следующее сообщение (голос или текст) от этого же юзера — `Extract
+   Commands` перехватывает его как `_kind: 'task_title'` **до** обычной
+   логики адресности (не важно, есть упоминание или нет — раз юзер сейчас
+   должен прислать название, значит это оно). Голосовое идёт через уже
+   готовый путь `Has Voice → ... → Whisper Transcribe` — код переиспользован
+   один в один, отличается только развилка в конце: новая нода **Is Task
+   Title** (проверяет `_kind` исходного апдейта, не текущий `$json`, та же
+   логика что и везде для ссылок на предыдущие ноды) отправляет
+   транскрипт либо в **Finalize Plane Task** (если это название задачи),
+   либо как раньше в `Build Router Prompt` (LLM-роутер).
+6. **Finalize Plane Task** — собирает `project`+`assignee`+`title` из
+   static data → **Plane Task Ready?** → **Create Plane Task** (`POST
+   .../work-items/`, body `{name, assignees: [planeUserId]}`) →
+   **Report Task Created** (чистит `pendingTasks[userId]`, шлёт
+   подтверждение со ссылкой на задачу) → `Send Reply`.
+
+**Обязательно перед использованием**:
+- Credential **Plane API** (Header Auth, `X-API-Key` = токен) —
+  привязать в трёх нодах: `List Plane Projects`, `Create Plane Task`.
+- Заполнить `planeUserId` у каждого в `USERS` (**четыре** копии теперь:
+  `Build Menu`, `Authorize & Route`, `Handle Project Pick`, `Handle
+  Assignee Pick` — везде вписывать одинаково). Member id смотреть через
+  `GET /api/v1/workspaces/2be/members/` с тем же `X-API-Key`.
 
 **Дальше**: `trigger_pipeline` (GitLab API — знакомо по
-`defectdojo-triage.json`), затем `create_task` (Plane API — ещё не
-трогали; на кнопках потребует доп. шаг — выбор исполнителя кнопками из
-`USERS`, затем текст названия — многошаговый диалог через workflow
-static data, как `armedUntil`/`armedBy` сейчас — тем же способом, что
-теперь и выбор продукта). Вложения (фото/документы) к `create_task` —
-отдельная логика, см. примечание в Этапе 2.
+`defectdojo-triage.json`), затем вложения (фото/документы) к
+`create_task` — трёхшаговый upload через presigned URL в Plane (получить
+ссылку → залить файл напрямую в S3/хранилище → подтвердить), пока не
+делали.
 
 Будет дополняться по мере прохождения этапов.
