@@ -1,0 +1,66 @@
+{
+  "name": "GitLab Auto CI Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gitlab-system-hook",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "g1-webhook",
+      "name": "System Hook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// System Hook шлёт ВСЕ системные события (project_create/destroy/\n// rename, user_create и т.д.) на один и тот же URL — GitLab не даёт\n// подписаться выборочно, как у project-level webhook, фильтруем сами.\n// Secret Token настраивается в самом хуке (Admin Area -> System Hooks\n// -> Secret Token при создании), приходит в заголовке X-Gitlab-Token —\n// сверяем, чтобы не реагировать на что попало с того же docker-network.\nconst SECRET_TOKEN = ''; // заполнить тем же значением, что вписано в System Hook\nconst item = $input.first().json;\nconst headers = item.headers || {};\nconst token = headers['x-gitlab-token'] || headers['X-Gitlab-Token'] || '';\nif (SECRET_TOKEN && token !== SECRET_TOKEN) return [];\nconst body = item.body || {};\nif (body.event_name !== 'project_create') return [];\nreturn [{ json: { projectId: body.project_id, pathWithNamespace: body.path_with_namespace } }];"
+      },
+      "id": "g2-filter",
+      "name": "Filter Project Create",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-180, 0]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://git.devops.2be.az/api/v4/projects/{{ $json.projectId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ci_config_path: 'universal-pipeline.yml@devops/ci-templates' }) }}",
+        "options": {}
+      },
+      "id": "g3-set-ci-path",
+      "name": "Set CI Config Path",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [60, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "GitLab API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "System Hook": {
+      "main": [[{ "node": "Filter Project Create", "type": "main", "index": 0 }]]
+    },
+    "Filter Project Create": {
+      "main": [[{ "node": "Set CI Config Path", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
