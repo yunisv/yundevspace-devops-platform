@@ -1,0 +1,71 @@
+# Собирает и пушит образы сканеров в собственный GitLab Container
+# Registry ЭТОГО проекта ($CI_REGISTRY_IMAGE). Через Kaniko, не
+# docker build — раннер настроен без privileged (см. config.toml,
+# privileged = false в docker-compose.gitlab.yml), а DinD для обычного
+# docker build требует privileged. Kaniko собирает образы без него.
+#
+# Ручной запуск (when: manual) — образы почти не меняются, пересобирать
+# на каждый пуш незачем; можно вместо/вместе с этим завести Pipeline
+# Schedule в GitLab UI (Build -> Pipeline schedules), например раз в
+# неделю, чтобы подтягивать апдейты оригинальных образов.
+stages:
+  - build
+
+.kaniko_build:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  rules:
+    - when: manual
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf '%s:%s' "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+
+build-gitleaks:
+  extends: .kaniko_build
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/gitleaks"
+      --dockerfile "${CI_PROJECT_DIR}/gitleaks/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/gitleaks:latest"
+
+build-trufflehog:
+  extends: .kaniko_build
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/trufflehog"
+      --dockerfile "${CI_PROJECT_DIR}/trufflehog/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/trufflehog:latest"
+
+build-syft:
+  extends: .kaniko_build
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/syft"
+      --dockerfile "${CI_PROJECT_DIR}/syft/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/syft:latest"
+
+build-grype:
+  extends: .kaniko_build
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/grype"
+      --dockerfile "${CI_PROJECT_DIR}/grype/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/grype:latest"
+
+build-osv-scanner:
+  extends: .kaniko_build
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/osv-scanner"
+      --dockerfile "${CI_PROJECT_DIR}/osv-scanner/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/osv-scanner:latest"
+
+build-hadolint:
+  extends: .kaniko_build
+  script:
+    - /kaniko/executor
+      --context "${CI_PROJECT_DIR}/hadolint"
+      --dockerfile "${CI_PROJECT_DIR}/hadolint/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/hadolint:latest"
