@@ -243,3 +243,30 @@ ClamAV) — не найден подтверждённый нативный па
 Variable в UI, ни тем более на группу) — это уже стоит в `ssdlc.yml`
 как глобальная `variables: GIT_SUBMODULE_STRATEGY: recursive`,
 подхватывается автоматически везде, где используется `ssdlc.yml`.
+
+### Сабмодуль на внешнем хосте (не self-hosted GitLab) — приватный GitHub и т.п.
+
+`CI_JOB_TOKEN`, которым GitLab сам аутентифицирует себя для сабмодулей
+на ТОМ ЖЕ инстансе, не работает для внешних хостов (GitHub, GitLab.com
+и т.д.) — если такой сабмодуль приватный, клонирование падает:
+`fatal: could not read Username for 'https://github.com'`.
+
+`ssdlc.yml` уже содержит `default: hooks: pre_get_sources_script:` —
+выполняется ДО git clone/submodule init (раньше любого
+`before_script`, который тут не успел бы), подставляет токен в URL
+через `git config --global url.".insteadOf"`, но только если на
+проекте задана переменная `GITHUB_TOKEN` — если её нет, ничего не
+делает, не мешает проектам без такого сабмодуля.
+
+Если у проекта есть приватный сабмодуль на GitHub — на ЭТОМ проекте
+(не глобально, у разных проектов разные сабмодули/токены):
+1. GitHub → Settings → Developer settings → **Fine-grained personal
+   access tokens** → создать, scope — только нужный репозиторий,
+   права `Contents: Read-only`.
+2. На проекте в GitLab → Settings → CI/CD → Variables → добавить
+   `GITHUB_TOKEN` (Masked), значение — токен.
+
+Для сабмодуля на другом внешнем хосте (не GitHub) — тот же `hooks:`
+в `ssdlc.yml` сработает только для `github.com`; при необходимости
+добавить ещё один `git config --global url... insteadOf` под нужный
+хост и свою переменную.

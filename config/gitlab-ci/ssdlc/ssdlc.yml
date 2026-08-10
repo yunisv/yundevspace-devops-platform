@@ -55,6 +55,24 @@ variables:
   # пустую директорию-заглушку (GitLab по умолчанию их не чекаутит).
   GIT_SUBMODULE_STRATEGY: recursive
 
+# Сабмодуль может лежать на внешнем хосте (GitHub, не сам self-hosted
+# GitLab) — CI_JOB_TOKEN, которым GitLab сам себя аутентифицирует для
+# сабмодулей на ТОМ ЖЕ инстансе, для внешнего git-хоста не работает.
+# pre_get_sources_script выполняется ДО git clone/submodule init (то
+# есть раньше любого before_script/script — обычный before_script тут
+# не успел бы), подставляет токен в URL, только если GITHUB_TOKEN
+# реально задан на проекте — иначе не мешает проектам без такого
+# сабмодуля. GITHUB_TOKEN — CI/CD-переменная (Masked) на КОНКРЕТНОМ
+# проекте, у которого есть приватный сабмодуль на GitHub (не тут, не
+# общий на все — у разных проектов разные приватные сабмодули/токены).
+default:
+  hooks:
+    pre_get_sources_script:
+      - |
+        if [ -n "$GITHUB_TOKEN" ]; then
+          git config --global url."https://oauth2:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+        fi
+
 include:
   - project: 'devops/pipelines'
     ref: main
