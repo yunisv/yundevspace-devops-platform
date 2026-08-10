@@ -150,7 +150,9 @@ per-job `rules:` — раз джобы теперь подключаются н�
 | | `sca-retirejs` | не fast, есть `package.json` | retire.js |
 | | `sca-govulncheck` | не fast, есть `*.go` | govulncheck |
 | `container` | `container-scan-trivy` | не fast, есть `Dockerfile` | Trivy (filesystem scan) |
+| | `container-scan-trivy-license` | не fast | Trivy (`--scanners license`) — license compliance, отдельно от vuln-отчёта |
 | | `container-scan-grype` | не fast, есть `Dockerfile` | Grype — второе мнение |
+| | `container-scan-hadolint` | не fast, есть `Dockerfile` | hadolint — линтер Dockerfile (best practices, не уязвимости) |
 | `iac` | `iac-scan-checkov` | не fast, есть `*.tf`/`k8s/`/`kubernetes/`/`helm/` | Checkov |
 | | `iac-scan-trivy` | не fast, тот же exists | `trivy config` |
 | `antivirus` | `antivirus` | `$ANTIVIRUS == "true"` (только на тегах) | ClamAV |

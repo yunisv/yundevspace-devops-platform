@@ -18,12 +18,15 @@
 #
 # scan_type подтверждены по docs.defectdojo.com/supported_tools:
 # Bandit Scan, Semgrep JSON Report, Gosec Scanner, Trufflehog Scan,
-# Gitleaks Scan, CycloneDX Scan, Trivy Scan, Checkov Scan. Для
-# остального (pip-audit, npm audit, retire.js, govulncheck,
-# eslint-security, njsscan, Grype x2, OSV-Scanner, trivy config,
-# ClamAV) — нет подтверждённого нативного парсера на момент написания,
-# используем "Generic Findings Import" как fallback — проверить на
-# месте, вдруг появился нативный, тогда поменять одну строку.
+# Gitleaks Scan, CycloneDX Scan, Trivy Scan, Checkov Scan. Trivy license-
+# отчёт тоже как "Trivy Scan" — тот же JSON-парсер Trivy разбирает и
+# vuln, и license секции своего вывода (подтверждено скриншотом реального
+# DefectDojo с отдельным Trivy Scan под лицензиями). Для остального
+# (pip-audit, npm audit, retire.js, govulncheck, eslint-security,
+# njsscan, Grype x2, OSV-Scanner, trivy config, ClamAV, hadolint) — нет
+# подтверждённого нативного парсера на момент написания, используем
+# "Generic Findings Import" как fallback — проверить на месте, вдруг
+# появился нативный, тогда поменять одну строку.
 defectdojo-import:
   stage: dd-import
   image: alpine:3.20
@@ -63,7 +66,9 @@ defectdojo-import:
       import_report retirejs-report.json "Generic Findings Import"
       import_report govulncheck-report.json "Generic Findings Import"
       import_report trivy-fs-report.json "Trivy Scan"
+      import_report trivy-license-report.json "Trivy Scan"
       import_report grype-container-report.json "Generic Findings Import"
       import_report checkov-report.json "Checkov Scan"
       import_report trivy-config-report.json "Generic Findings Import"
       import_report clamav-report.txt "Generic Findings Import"
+      import_report hadolint-report.json "Generic Findings Import"

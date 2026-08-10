@@ -10,7 +10,11 @@
 # основной + Grype на критичных/внешних образах для точности CVE-
 # матчинга) — тот же бинарь, что уже используется в sca.yml.
 #
-# Обе джобы пропускаются в fast-режиме.
+# hadolint — линтер Dockerfile (best practices: root user, закреплённые
+# версии базовых образов и т.д.) — то, что Trivy/Grype не проверяют,
+# они смотрят на уязвимости, не на стиль/практики самого Dockerfile.
+#
+# Все джобы пропускаются в fast-режиме.
 
 container-scan-trivy:
   stage: container
@@ -28,6 +32,25 @@ container-scan-trivy:
     when: always
     paths:
       - trivy-fs-report.json
+
+# Отдельно от container-scan-trivy — тот же Trivy умеет сканировать
+# именно лицензии зависимостей (не CVE), полезно как отдельная
+# категория для compliance, не смешивать с обычным vuln-отчётом.
+container-scan-trivy-license:
+  stage: container
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  rules:
+    - if: '$PIPELINE_MODE == "fast"'
+      when: never
+    - when: on_success
+  script:
+    - trivy fs --scanners license --format json -o trivy-license-report.json . || true
+  artifacts:
+    when: always
+    paths:
+      - trivy-license-report.json
 
 # Distroless-образ Anchore, тот же фикс, что и у sca-grype/sbom —
 # ставим бинарь через install-script на alpine, entrypoint override
@@ -49,3 +72,23 @@ container-scan-grype:
     when: always
     paths:
       - grype-container-report.json
+
+# hadolint/hadolint:latest-debian (не -alpine/distroless вариант) —
+# есть нормальный shell, entrypoint: [""] по тому же паттерну, что и
+# у остальных CLI-инструмент-образов.
+container-scan-hadolint:
+  stage: container
+  image:
+    name: hadolint/hadolint:latest-debian
+    entrypoint: [""]
+  rules:
+    - if: '$PIPELINE_MODE == "fast"'
+      when: never
+    - exists:
+        - Dockerfile
+  script:
+    - hadolint --no-fail -f json Dockerfile > hadolint-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - hadolint-report.json
