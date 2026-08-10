@@ -78,9 +78,9 @@ GITLAB_TOKEN=<personal access token, права api> \
    `ci_config_path` = `pipeline.yml` в его настройках) — именно его
    выполняет GitLab, когда `ssdlc.yml` триггерит
    `trigger: project: devops/pipelines`.
-3. На проекте `devops/pipelines` — CI/CD-переменные (Settings → CI/CD
-   → Variables, замаскировать): `DEFECTDOJO_TOKEN`,
-   `DEFECTDOJO_ENGAGEMENT_ID`.
+3. На проекте `devops/pipelines` — CI/CD-переменная (Settings → CI/CD
+   → Variables, замаскировать): `DEFECTDOJO_TOKEN`. Отдельный
+   `DEFECTDOJO_ENGAGEMENT_ID` не нужен — см. ниже, почему.
 4. Вписать `ssdlc.yml@devops/ssdlc` в инстанс-настройку (см. выше) —
    для новых проектов, и/или прогнать `backfill-ci-router.sh` — для
    существующих.
@@ -150,6 +150,29 @@ DAST (динамическое сканирование запущенного �
 включён — требует реального URL задеплоенного окружения, не
 универсализируется так же просто; можно добавить отдельным
 опциональным этапом позже.
+
+## Product/Engagement в DefectDojo — авто, без ручного ID
+
+Изначально был один статичный `DEFECTDOJO_ENGAGEMENT_ID` на всех — но
+проектов может быть много, и тогда находки ВСЕХ проектов сыпались бы в
+один Engagement, перемешиваясь. Вместо этого — DefectDojo умеет сам
+заводить Product/Engagement по имени
+(`auto_create_context=True` + `product_type_name`/`product_name`/
+`engagement_name` в теле запроса `import-scan`, см.
+`docs.defectdojo.com/import_data/import_scan_files/api_pipeline_modelling`):
+если Product с таким именем ещё нет — создаётся, если есть — импорт
+идёт туда же. `product_name` = `SOURCE_PROJECT_PATH` (путь исходного
+проекта, приходит из `ssdlc.yml`, где он есть в `$CI_PROJECT_PATH` —
+в `devops/pipelines` своего `$CI_PROJECT_PATH` для этого не хватит,
+там всегда будет "devops/pipelines", не реальный проект). Все находки
+у одного проекта — под общим `product_type_name=SSDLC`,
+`engagement_name=CI/CD` (постоянный, не разовый Engagement — типичный
+паттерн для автоматизированных CI/CD-сканов, находки копятся туда со
+временем, не как time-boxed pentest-engagement).
+
+Практический эффект: ничего не нужно заранее заводить в DefectDojo
+руками под новый проект — первый же прогон пайплайна сам создаст для
+него Product+Engagement с понятным именем.
 
 ## DefectDojo scan_type
 
