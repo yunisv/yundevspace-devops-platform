@@ -1,10 +1,20 @@
 # IaC-скан — только если в репо реально есть Terraform/Kubernetes/Helm,
 # не на любой *.yaml (иначе триггерилось бы вообще всегда, у любого
-# проекта что-нибудь да есть в yaml).
-iac-scan:
+# проекта что-нибудь да есть в yaml). Обе джобы пропускаются в
+# fast-режиме.
+#
+# Checkov — специалист (1000+ policy, graph-based cross-resource
+# проверки, compliance-маппинг CIS/SOC2/HIPAA/PCI-DSS). tfsec (был бы
+# альтернативой) официально deprecated в 2026 — все его чеки перенесены
+# в Trivy, поэтому `trivy config` рядом как лёгкое быстрое дополнение
+# (тот же бинарь, что и в container-scan.yml), а не отдельный tfsec.
+
+iac-scan-checkov:
   stage: iac
   image: bridgecrew/checkov:latest
   rules:
+    - if: '$PIPELINE_MODE == "fast"'
+      when: never
     - exists:
         - '**/*.tf'
         - '**/*.tfvars'
@@ -18,3 +28,23 @@ iac-scan:
     when: always
     paths:
       - checkov-report.json
+
+iac-scan-trivy:
+  stage: iac
+  image: aquasec/trivy:latest
+  rules:
+    - if: '$PIPELINE_MODE == "fast"'
+      when: never
+    - exists:
+        - '**/*.tf'
+        - '**/*.tfvars'
+        - 'k8s/**/*.yaml'
+        - 'k8s/**/*.yml'
+        - 'kubernetes/**/*.yaml'
+        - 'helm/**/*.yaml'
+  script:
+    - trivy config --format json -o trivy-config-report.json . || true
+  artifacts:
+    when: always
+    paths:
+      - trivy-config-report.json

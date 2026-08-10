@@ -6,11 +6,15 @@
 # .gitlab-ci.yml (или ci_config_path проекта явно указывать на него) —
 # именно его выполняет GitLab, когда devops/ssdlc триггерит
 # `trigger: project: devops/pipelines`.
+#
+# sbom стоит ДО sca намеренно: sca-grype сканирует уже готовый sbom.json
+# (needs: ['sbom']) вместо повторного инвентаря — если поменять порядок,
+# grype не найдёт артефакт.
 stages:
   - secret
   - sast
-  - sca
   - sbom
+  - sca
   - container
   - iac
   - antivirus
@@ -19,8 +23,8 @@ stages:
 include:
   - local: secret-scan.yml
   - local: sast.yml
-  - local: sca.yml
   - local: sbom.yml
+  - local: sca.yml
   - local: container-scan.yml
   - local: iac-scan.yml
   - local: antivirus.yml

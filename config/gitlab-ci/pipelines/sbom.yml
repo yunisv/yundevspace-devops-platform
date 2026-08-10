@@ -1,9 +1,14 @@
-# SBOM — опись состава проекта (для SCA/license-compliance дальше).
-# Без rules: exists — Syft сам разбирается, есть ли что описывать, и
-# просто выдаёт пустой/минимальный SBOM, если нет.
+# SBOM — опись состава проекта, входной артефакт для sca-grype (см.
+# sca.yml, needs: ['sbom']) и license-compliance в дальнейшем.
+# Пропускается в fast-режиме вместе с остальными "тяжёлыми" стадиями
+# (secret-scan/SAST всегда бегут, эта — нет).
 sbom:
   stage: sbom
   image: anchore/syft:latest
+  rules:
+    - if: '$PIPELINE_MODE == "fast"'
+      when: never
+    - when: on_success
   script:
     - syft dir:. -o cyclonedx-json=sbom.json
   artifacts:
