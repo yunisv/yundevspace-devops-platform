@@ -6,11 +6,17 @@
 # || true везде: сканеры возвращают ненулевой код при находках, это не
 # должно валить пайплайн — решение "падать или нет" на quality-gate,
 # не здесь.
+#
+# Первый rules-пункт у каждой джобы — SEC_ENABLE/CODE_SCAN_ENABLE, те
+# же CI/CD-переменные (не заданы у проекта — по умолчанию включено),
+# что и в secret-scan.yml/sca.yml.
 
 sast-bandit:
   stage: sast
   image: python:3.12-slim
   rules:
+    - if: '$SEC_ENABLE == "false" || $CODE_SCAN_ENABLE == "false"'
+      when: never
     - exists:
         - '**/*.py'
   before_script:
@@ -28,6 +34,8 @@ sast-semgrep:
     name: semgrep/semgrep:latest
     entrypoint: [""]
   rules:
+    - if: '$SEC_ENABLE == "false" || $CODE_SCAN_ENABLE == "false"'
+      when: never
     - exists:
         - '**/*.py'
         - '**/*.js'
@@ -47,6 +55,8 @@ sast-gosec:
     name: securego/gosec:latest
     entrypoint: [""]
   rules:
+    - if: '$SEC_ENABLE == "false" || $CODE_SCAN_ENABLE == "false"'
+      when: never
     - exists:
         - '**/*.go'
   script:
@@ -60,6 +70,8 @@ sast-eslint-security:
   stage: sast
   image: node:20-alpine
   rules:
+    - if: '$SEC_ENABLE == "false" || $CODE_SCAN_ENABLE == "false"'
+      when: never
     - exists:
         - '**/*.js'
         - '**/*.ts'
@@ -83,6 +95,8 @@ sast-njsscan:
   stage: sast
   image: python:3.12-slim
   rules:
+    - if: '$SEC_ENABLE == "false" || $CODE_SCAN_ENABLE == "false"'
+      when: never
     - exists:
         - '**/*.js'
         - '**/*.ts'

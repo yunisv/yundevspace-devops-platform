@@ -178,7 +178,7 @@ GITLAB_TOKEN=<personal access token, права api> \
 | `iac` | `iac-scan-checkov` | не fast, есть `*.tf`/`k8s/`/`kubernetes/`/`helm/` | Checkov |
 | | `iac-scan-trivy` | не fast, тот же exists | `trivy config` |
 | `antivirus` | `antivirus` | `$ANTIVIRUS == "true"` (только на тегах) | ClamAV |
-| `dd-import` | `defectdojo-import` | всегда | curl-импорт всех найденных отчётов в DefectDojo |
+| `dd-import` | `defectdojo-import` | `$SEC_ENABLE != "false"` | curl-импорт всех найденных отчётов в DefectDojo |
 
 Для Python получается 3 сканера (bandit + semgrep + pip-audit) плюс
 универсальные grype/osv-scanner, для JS/TS — 5 языко-специфичных
@@ -198,6 +198,56 @@ DAST (динамическое сканирование запущенного �
 включён — требует реального URL задеплоенного окружения, не
 универсализируется так же просто; можно добавить отдельным
 опциональным этапом позже.
+
+## Переменные-тумблеры (SEC_ENABLE и т.д.)
+
+По образцу реального enterprise-пайплайна коллеги (там джоба
+`Devsecops:` принимает набор CI/CD-переменных для точечного
+включения/выключения категорий сканов) — добавлен такой же гейтинг
+через обычные CI/CD-переменные проекта (Settings -> CI/CD ->
+Variables), НЕЗАВИСИМО от `pipeline_mode`/`$[[ inputs.x ]]` (см. ниже,
+почему это два разных механизма).
+
+| Переменная | Что гейтит | По умолчанию |
+|---|---|---|
+| `SEC_ENABLE` | весь SSDLC-пайплайн целиком (все стадии кроме отключаемых по отдельности) | не задана = включено |
+| `SECRETS_SCAN_ENABLE` | `secret-scan.yml` (gitleaks, trufflehog) | не задана = включено |
+| `CODE_SCAN_ENABLE` | `sast.yml` (все 5 джоб) | не задана = включено |
+| `SCA_ENABLE` | `sca.yml` (все 6 джоб) и `sbom.yml` (sbom фидит только sca-grype) | не задана = включено |
+| `DEFECTDOJO_URL` | `defectdojo-import.yml` — куда импортировать | не задана = `https://dojo.devops.2be.az` |
+| `DOJO_PROJECT_NAME` | `defectdojo-import.yml` — имя Product в DefectDojo | не задана = `$CI_PROJECT_PATH` |
+
+Переменная не задана на проекте — поведение как раньше (всё включено,
+дефолтный DefectDojo). Чтобы выключить, например, SCA на конкретном
+проекте: выставить `SCA_ENABLE=false` в Settings -> CI/CD -> Variables
+этого проекта — джобы `sca-*`/`sbom` пропустятся с `when: never`, в
+логе пайплайна будут видны как skipped.
+
+**Это не замена `pipeline_mode`, а дополнение** — два независимых
+способа гейтить джобы:
+- `pipeline_mode` (`fast`/`full`/`release`, через `spec:inputs:` в
+  `pipeline.yml`) — решает АВТОМАТИЧЕСКИ, по ветке/тегу, что должно
+  бежать в принципе (fast на dev/feature, full на main, release на
+  тегах).
+- `SEC_ENABLE`/`SECRETS_SCAN_ENABLE`/`CODE_SCAN_ENABLE`/`SCA_ENABLE` —
+  РУЧНОЙ override поверх этого на конкретном проекте (например, у
+  легаси-репозитория временно отключить шумный SCA, не трогая общую
+  политику веток).
+
+**Что НЕ перенесено из скриншота коллеги и почему**: `SEC_PTAI`,
+`SEC_CODEQL` — отдельные сканеры (PT AI, CodeQL), которых в нашем
+наборе инструментов нет; `SEC_DUP_FP` — дедупликация false-positive
+внутри DefectDojo, требует отдельной логики на стороне DefectDojo,
+которую мы не настраивали; `SEC_TASK_CREATOR` — автосоздание тасков
+(видимо в Jira/трекере коллеги), у нас нет такой интеграции;
+`SEC_GITLAB_EXPORT` — экспорт в нативный GitLab Security Dashboard
+формат (`gl-sast-report.json` и т.п.), у нас отчёты идут только в
+DefectDojo; `SEC_CLEANUP_ENABLE` — не ясно из скриншота, что именно
+чистит (вероятно временные артефакты/старые сканы), нет эквивалентной
+логики. Добавлять переменные без реальной функциональности за ними —
+создавать иллюзию несуществующей возможности, поэтому осознанно
+пропущены; если понадобится что-то из этого — реализовывать как
+отдельную задачу.
 
 ## Product/Engagement в DefectDojo — авто, без ручного ID
 

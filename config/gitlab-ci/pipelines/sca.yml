@@ -20,6 +20,8 @@ sca-grype:
   image: alpine:3.20
   needs: ['sbom']
   rules:
+    - if: '$SEC_ENABLE == "false" || $SCA_ENABLE == "false"'
+      when: never
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - when: on_success
@@ -42,6 +44,8 @@ sca-osv-scanner:
   stage: sca
   image: alpine:3.20
   rules:
+    - if: '$SEC_ENABLE == "false" || $SCA_ENABLE == "false"'
+      when: never
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - when: on_success
@@ -61,6 +65,8 @@ sca-pip-audit:
   stage: sca
   image: python:3.12-slim
   rules:
+    - if: '$SEC_ENABLE == "false" || $SCA_ENABLE == "false"'
+      when: never
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - exists:
@@ -78,6 +84,8 @@ sca-npm-audit:
   stage: sca
   image: node:20-alpine
   rules:
+    - if: '$SEC_ENABLE == "false" || $SCA_ENABLE == "false"'
+      when: never
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - exists:
@@ -93,6 +101,8 @@ sca-retirejs:
   stage: sca
   image: node:20-alpine
   rules:
+    - if: '$SEC_ENABLE == "false" || $SCA_ENABLE == "false"'
+      when: never
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - exists:
@@ -110,6 +120,8 @@ sca-govulncheck:
   stage: sca
   image: golang:1.23
   rules:
+    - if: '$SEC_ENABLE == "false" || $SCA_ENABLE == "false"'
+      when: never
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - exists:

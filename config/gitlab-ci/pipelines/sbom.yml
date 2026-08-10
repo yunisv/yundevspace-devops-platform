@@ -8,10 +8,16 @@
 # тут не помогает, GitLab физически нечем выполнить script). Вместо
 # образа вендора — обычный alpine + официальный install-script,
 # ставящий бинарь syft.
+#
+# Первый rules-пункт — SEC_ENABLE/SCA_ENABLE, те же CI/CD-переменные,
+# что и в sca.yml: sbom фидит только sca-grype (needs: ['sbom']), так
+# что гейтится той же парой, что и вся sca-стадия.
 sbom:
   stage: sbom
   image: alpine:3.20
   rules:
+    - if: '$SEC_ENABLE == "false" || $SCA_ENABLE == "false"'
+      when: never
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - when: on_success

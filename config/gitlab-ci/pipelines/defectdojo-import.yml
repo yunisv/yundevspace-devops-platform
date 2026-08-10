@@ -16,6 +16,13 @@
 # проекта devops/pipelines (Settings -> CI/CD -> Variables,
 # замаскировать). DEFECTDOJO_ENGAGEMENT_ID больше не нужен.
 #
+# DEFECTDOJO_URL/DOJO_PROJECT_NAME — опциональные CI/CD-переменные
+# проекта (не заданы — берутся дефолты: наш dojo.devops.2be.az и
+# $CI_PROJECT_PATH). Позволяют отдельному проекту переопределить, куда
+# и под каким именем продукта импортировать находки, не трогая этот
+# файл. rules: гейтится SEC_ENABLE — тот же общий тумблер, что и у
+# secret-scan/sast/sca/sbom (см. их шапки).
+#
 # scan_type подтверждены по docs.defectdojo.com/supported_tools:
 # Bandit Scan, Semgrep JSON Report, Gosec Scanner, Trufflehog Scan,
 # Gitleaks Scan, CycloneDX Scan, Trivy Scan, Checkov Scan. Trivy license-
@@ -31,24 +38,28 @@ defectdojo-import:
   stage: dd-import
   image: alpine:3.20
   rules:
+    - if: '$SEC_ENABLE == "false"'
+      when: never
     - when: always
   before_script:
     - apk add --no-cache curl
   script:
     - |
+      DD_URL="${DEFECTDOJO_URL:-https://dojo.devops.2be.az}"
+      DD_PRODUCT="${DOJO_PROJECT_NAME:-$CI_PROJECT_PATH}"
       import_report() {
         file="$1"
         scan_type="$2"
         if [ -f "$file" ]; then
-          echo "Импорт ${file} как \"${scan_type}\" (продукт: ${CI_PROJECT_PATH})..."
+          echo "Импорт ${file} как \"${scan_type}\" (продукт: ${DD_PRODUCT})..."
           curl -sS -H "Authorization: Token ${DEFECTDOJO_TOKEN}" \
             -F "file=@${file}" \
             -F "scan_type=${scan_type}" \
             -F "auto_create_context=True" \
             -F "product_type_name=SSDLC" \
-            -F "product_name=${CI_PROJECT_PATH}" \
+            -F "product_name=${DD_PRODUCT}" \
             -F "engagement_name=CI/CD" \
-            "https://dojo.devops.2be.az/api/v2/import-scan/" > /dev/null || true
+            "${DD_URL}/api/v2/import-scan/" > /dev/null || true
         fi
       }
       import_report gitleaks-report.json "Gitleaks Scan"
