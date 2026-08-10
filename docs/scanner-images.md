@@ -52,28 +52,30 @@ no such file or directory` — в каждом `Dockerfile` в коммента�
    docker run --rm registry.devops.2be.az/devops/scanner-images/gitleaks:latest gitleaks version
    ```
 
-## После того как все образы собраны и проверены — переключить пайплайны
+## Переключено
 
-**Пока не делаю это автоматически** — если переключить
-`config/gitlab-ci/pipelines/*.yml` на новые образы ДО того, как они
-реально собраны и запушены в registry, текущий рабочий пайплайн
-сломается (образ не найдётся). Сначала собери и провери все 6, потом
-скажи — заменю:
+Все 6 образов собраны и проверены живьём (`docker run --rm
+registry.devops.2be.az/devops/scanner-images/<tool>:latest <tool>
+--version` — все вывели версию без ошибок). `config/gitlab-ci/pipelines/*.yml`
+переключены на них:
 
 - `secret-scan.yml`: `zricethezav/gitleaks:latest` →
-  `$CI_REGISTRY/devops/scanner-images/gitleaks:latest`,
+  `registry.devops.2be.az/devops/scanner-images/gitleaks:latest`,
   `trufflesecurity/trufflehog:latest` → `.../trufflehog:latest`,
-  убрать `entrypoint: [""]` у обоих (не нужен).
-- `sbom.yml`: `anchore/syft:latest` → `.../syft:latest`.
-- `sca.yml` (`sca-grype`): убрать `alpine:3.20` +
-  `before_script: apk add curl && install.sh`, образ →
-  `.../grype:latest`.
-- `sca.yml` (`sca-osv-scanner`): убрать `alpine:3.20` +
-  `before_script`, образ → `.../osv-scanner:latest`.
+  `entrypoint: [""]` убран у обоих (не нужен).
+- `sbom.yml`: `alpine:3.20` + curl-install →
+  `.../syft:latest`.
+- `sca.yml` (`sca-grype`, `sca-osv-scanner`): `alpine:3.20` +
+  `before_script` убраны, образы → `.../grype:latest`,
+  `.../osv-scanner:latest`.
 - `container-scan.yml` (`container-scan-grype`): та же замена, что и
   `sca-grype`.
 - `container-scan.yml` (`container-scan-hadolint`): образ →
-  `.../hadolint:latest`, убрать `entrypoint: [""]`.
+  `.../hadolint:latest`, `entrypoint: [""]` убран.
+
+`aquasec/trivy` (container-scan-trivy, container-scan-trivy-license,
+iac-scan-trivy) в `devops/scanner-images` не пересобирался — тот образ
+и так работал без entrypoint/distroless-проблем, пересборка не нужна.
 
 ## Обслуживание
 

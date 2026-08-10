@@ -3,27 +3,25 @@
 # Пропускается в fast-режиме вместе с остальными "тяжёлыми" стадиями
 # (secret-scan/SAST всегда бегут, эта — нет).
 #
-# Образ anchore/syft — distroless, там вообще нет /bin/sh (не просто
-# "неправильный" ENTRYPOINT, как у gitleaks/trufflehog — entrypoint: [""]
-# тут не помогает, GitLab физически нечем выполнить script). Вместо
-# образа вендора — обычный alpine + официальный install-script,
-# ставящий бинарь syft.
+# Образ — из своего registry (devops/scanner-images, см.
+# docs/scanner-images.md): alpine + скопированный бинарь syft, без
+# curl-install воркэраунда (вендорский anchore/syft — distroless, там
+# вообще нет /bin/sh, entrypoint: [""] такое не чинит, поэтому раньше
+# ставили бинарь через install-script на голый alpine на лету — свой
+# образ уже содержит бинарь, ничего ставить не нужно).
 #
 # Первый rules-пункт — SEC_ENABLE/SCA_ENABLE, те же CI/CD-переменные,
 # что и в sca.yml: sbom фидит только sca-grype (needs: ['sbom']), так
 # что гейтится той же парой, что и вся sca-стадия.
 sbom:
   stage: sbom
-  image: alpine:3.20
+  image: registry.devops.2be.az/devops/scanner-images/syft:latest
   rules:
     - if: '$SEC_ENABLE == "false" || $SCA_ENABLE == "false"'
       when: never
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - when: on_success
-  before_script:
-    - apk add --no-cache curl
-    - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
   script:
     - syft dir:. -o cyclonedx-json=sbom.json
   artifacts:
