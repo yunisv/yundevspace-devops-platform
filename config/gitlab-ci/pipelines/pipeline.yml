@@ -1,15 +1,41 @@
+spec:
+  inputs:
+    pipeline_mode:
+      type: string
+      default: "full"
+      description: "fast | full | release — определяет, какие стадии реально бегут (см. rules: в secret-scan/sast/sca/sbom/container/iac/antivirus)"
+    antivirus:
+      type: string
+      default: "false"
+      description: "\"true\"/\"false\" — включает джобу antivirus (ClamAV), обычно только на релизных тегах"
+---
 # Оркестратор — все файлы сканов в этом же репозитории (devops/pipelines),
-# поэтому local:, не project:/file:. Триггерится из ssdlc.yml (репозиторий
-# devops/ssdlc) межпроектным trigger:, см. docs/ssdlc-pipeline.md.
+# поэтому local:, не project:/file:. Подключается из ssdlc.yml
+# (репозиторий devops/ssdlc) через include: - project: (не trigger: —
+# см. комментарий в ssdlc.yml, почему именно так: trigger: project:
+# создаёт ОТДЕЛЬНЫЙ пайплайн в контексте devops/pipelines со своим
+# чекаутом, include: мёржит джобы в пайплайн исходного проекта).
 #
-# На проекте devops/pipelines этот файл должен быть корневым
-# .gitlab-ci.yml (или ci_config_path проекта явно указывать на него) —
-# именно его выполняет GitLab, когда devops/ssdlc триггерит
-# `trigger: project: devops/pipelines`.
+# spec:inputs: выше — типизированные параметры вместо голых CI/CD
+# переменных, которые ssdlc.yml передаёт через include:...inputs:.
+# Сразу мапим их в переменные с ТЕМИ ЖЕ именами
+# ($PIPELINE_MODE/$ANTIVIRUS), что уже использовались везде ниже по
+# файлам сканеров — ни один из них (secret-scan.yml, sast.yml и т.д.)
+# менять не пришлось, они как читали $PIPELINE_MODE/$ANTIVIRUS обычными
+# CI/CD переменными, так и продолжают.
+#
+# На проекте devops/pipelines этот файл должен лежать под именем
+# pipeline.yml (или быть подключён туда, куда указывает ci_config_path
+# — сам проект НИКОГДА не запускает свой собственный пайплайн, он
+# только "библиотека", читается по имени через include извне).
 #
 # sbom стоит ДО sca намеренно: sca-grype сканирует уже готовый sbom.json
 # (needs: ['sbom']) вместо повторного инвентаря — если поменять порядок,
 # grype не найдёт артефакт.
+variables:
+  PIPELINE_MODE: $[[ inputs.pipeline_mode ]]
+  ANTIVIRUS: $[[ inputs.antivirus ]]
+
 stages:
   - secret
   - sast

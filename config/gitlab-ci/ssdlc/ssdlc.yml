@@ -22,30 +22,27 @@
 # Это то, на что указывают проекты (ci_config_path), см.
 # docs/ssdlc-pipeline.md.
 #
-# Три режима по ветке/тегу — через workflow:rules: (глобальные
-# переменные пайплайна, GitLab поддерживает conditional variables
-# именно на этом уровне; per-job rules:variables тут не подходят, раз
-# джобы теперь не в отдельной триггер-джобе, а мёржатся напрямую):
-#   - тег              -> release: всё, включая antivirus
-#   - main              -> full: всё, кроме antivirus (тяжёлый — только
-#                          перед релизом, не на каждый push)
-#   - dev/feature/*      -> fast: только secret-scan + SAST, чтобы не
-#                          тормозить обычную разработку
-#   - всё остальное      -> пайплайн не создаётся вообще (when: never)
+# Три режима по ветке/тегу. Раньше это шло через workflow:rules:
+# variables: (голые CI/CD переменные) — переведено на нормальный
+# spec:inputs:/$[[ inputs.x ]] у pipeline.yml (см. этот файл — типизация
+# и дефолты, а не голые переменные, которые "текут" куда угодно). Это
+# НЕ требует формального versioned CI/CD Components каталога — обычный
+# include: - project: с inputs: работает, если у целевого файла есть
+# свой spec: (подтверждено примером из реального production SSDLC,
+# см. коммит с этим изменением).
+#
+# workflow:rules: тут остаётся — определяет, создаётся ли пайплайн
+# вообще (три ветки/тег — да, всё остальное — when: never). Конкретные
+# inputs передаются НИЖЕ, в include: — три записи на тот же файл,
+# каждая со своими inputs и той же rules-логикой (include: тоже
+# поддерживает rules: на каждую запись, только одна из трёх реально
+# сработает за раз, раз workflow:rules: и include:rules: используют
+# одинаковые условия).
 workflow:
   rules:
     - if: '$CI_COMMIT_TAG'
-      variables:
-        PIPELINE_MODE: "release"
-        ANTIVIRUS: "true"
     - if: '$CI_COMMIT_BRANCH == "main"'
-      variables:
-        PIPELINE_MODE: "full"
-        ANTIVIRUS: "false"
     - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH =~ /^feature\//'
-      variables:
-        PIPELINE_MODE: "fast"
-        ANTIVIRUS: "false"
     - when: never
 
 variables:
@@ -89,3 +86,24 @@ include:
   - project: 'devops/pipelines'
     ref: main
     file: 'pipeline.yml'
+    inputs:
+      pipeline_mode: "release"
+      antivirus: "true"
+    rules:
+      - if: '$CI_COMMIT_TAG'
+  - project: 'devops/pipelines'
+    ref: main
+    file: 'pipeline.yml'
+    inputs:
+      pipeline_mode: "full"
+      antivirus: "false"
+    rules:
+      - if: '$CI_COMMIT_BRANCH == "main"'
+  - project: 'devops/pipelines'
+    ref: main
+    file: 'pipeline.yml'
+    inputs:
+      pipeline_mode: "fast"
+      antivirus: "false"
+    rules:
+      - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH =~ /^feature\//'
