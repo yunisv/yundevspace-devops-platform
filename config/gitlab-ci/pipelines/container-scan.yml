@@ -1,14 +1,23 @@
-# Скан файловой системы репозитория (зависимости, Dockerfile) через
-# Trivy — тот же инструмент, что уже используется в docs/architecture.md
-# для скана собранного образа в registry. Этот job лёгкий и не требует
-# docker-in-docker (не билдит образ) — если нужен скан именно
-# СОБРАННОГО образа конкретного проекта, это уже покрыто существующим
-# `trivy image ...` шагом в собственном .gitlab-ci.yml проекта, см.
-# docs/architecture.md.
-container-scan:
+# Trivy — основной скан файловой системы репозитория (зависимости,
+# Dockerfile), тот же инструмент, что уже используется в
+# docs/architecture.md для скана собранного образа в registry. Этот
+# job лёгкий и не требует docker-in-docker (не билдит образ) — если
+# нужен скан именно СОБРАННОГО образа конкретного проекта, это уже
+# покрыто существующим `trivy image ...` шагом в собственном
+# .gitlab-ci.yml проекта, см. docs/architecture.md.
+#
+# Grype рядом как второе мнение (рекомендуемый в 2026 паттерн: Trivy
+# основной + Grype на критичных/внешних образах для точности CVE-
+# матчинга) — тот же бинарь, что уже используется в sca.yml.
+#
+# Обе джобы пропускаются в fast-режиме.
+
+container-scan-trivy:
   stage: container
   image: aquasec/trivy:latest
   rules:
+    - if: '$PIPELINE_MODE == "fast"'
+      when: never
     - exists:
         - Dockerfile
   script:
@@ -17,3 +26,18 @@ container-scan:
     when: always
     paths:
       - trivy-fs-report.json
+
+container-scan-grype:
+  stage: container
+  image: anchore/grype:latest
+  rules:
+    - if: '$PIPELINE_MODE == "fast"'
+      when: never
+    - exists:
+        - Dockerfile
+  script:
+    - grype dir:. -o json > grype-container-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - grype-container-report.json

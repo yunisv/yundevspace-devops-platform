@@ -1,6 +1,6 @@
 # Policy-шлюз — единственный файл в этом репозитории. Сам ничего не
-# сканирует: решает "когда" (только ветка main) и "с какими
-# параметрами" (переменные, проброшенные в devops/pipelines), сама
+# сканирует: решает "когда" (branch/tag) и "с какими параметрами"
+# (PIPELINE_MODE + ANTIVIRUS, проброшенные в devops/pipelines), сама
 # работа — в devops/pipelines/pipeline.yml.
 #
 # Это то, на что указывают проекты (ci_config_path / include), см.
@@ -10,20 +10,37 @@
 # только внутри одного репозитория, а pipeline.yml лежит в ДРУГОМ
 # репозитории (devops/pipelines) — поэтому здесь trigger: project:,
 # не include: local:.
+#
+# Три режима по ветке/тегу, у каждого свои variables (GitLab
+# поддерживает override переменных для каждого правила в rules:
+# отдельно — это не три джобы, а три условия одной):
+#   - тег              -> release: всё, включая antivirus
+#   - main              -> full: всё, кроме antivirus (тяжёлый — только
+#                          перед релизом, не на каждый push)
+#   - dev/feature/*      -> fast: только secret-scan + SAST, чтобы не
+#                          тормозить обычную разработку — SCA/SBOM/
+#                          container/IaC/antivirus пропускаются (гейт
+#                          на PIPELINE_MODE в соответствующих джобах в
+#                          devops/pipelines).
 stages:
   - devsecops
 
 devsecops:
   stage: devsecops
   rules:
+    - if: '$CI_COMMIT_TAG'
+      variables:
+        PIPELINE_MODE: "release"
+        ANTIVIRUS: "true"
     - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+        PIPELINE_MODE: "full"
+        ANTIVIRUS: "false"
+    - if: '$CI_COMMIT_BRANCH == "dev" || $CI_COMMIT_BRANCH =~ /^feature\//'
+      variables:
+        PIPELINE_MODE: "fast"
+        ANTIVIRUS: "false"
   trigger:
     project: devops/pipelines
     branch: main
     strategy: depend
-  variables:
-    # Единственный переключаемый параметр по черновику пользователя —
-    # antivirus. Добавить новый параметр: строка тут + rules: в
-    # соответствующей джобе в devops/pipelines (см. antivirus.yml как
-    # образец).
-    ANTIVIRUS: "true"
