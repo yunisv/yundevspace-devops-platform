@@ -11,7 +11,9 @@
 
 iac-scan-checkov:
   stage: iac
-  image: bridgecrew/checkov:latest
+  image:
+    name: bridgecrew/checkov:latest
+    entrypoint: [""]
   rules:
     - if: '$PIPELINE_MODE == "fast"'
       when: never
@@ -31,7 +33,9 @@ iac-scan-checkov:
 
 iac-scan-trivy:
   stage: iac
-  image: aquasec/trivy:latest
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
   rules:
     - if: '$PIPELINE_MODE == "fast"'
       when: never

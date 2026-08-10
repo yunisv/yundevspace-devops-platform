@@ -24,7 +24,9 @@ sast-bandit:
 
 sast-semgrep:
   stage: sast
-  image: semgrep/semgrep:latest
+  image:
+    name: semgrep/semgrep:latest
+    entrypoint: [""]
   rules:
     - exists:
         - '**/*.py'
@@ -41,7 +43,9 @@ sast-semgrep:
 
 sast-gosec:
   stage: sast
-  image: securego/gosec:latest
+  image:
+    name: securego/gosec:latest
+    entrypoint: [""]
   rules:
     - exists:
         - '**/*.go'

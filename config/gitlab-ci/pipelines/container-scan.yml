@@ -14,7 +14,9 @@
 
 container-scan-trivy:
   stage: container
-  image: aquasec/trivy:latest
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
   rules:
     - if: '$PIPELINE_MODE == "fast"'
       when: never
@@ -29,7 +31,9 @@ container-scan-trivy:
 
 container-scan-grype:
   stage: container
-  image: anchore/grype:latest
+  image:
+    name: anchore/grype:latest
+    entrypoint: [""]
   rules:
     - if: '$PIPELINE_MODE == "fast"'
       when: never

@@ -13,7 +13,9 @@
 
 sca-grype:
   stage: sca
-  image: anchore/grype:latest
+  image:
+    name: anchore/grype:latest
+    entrypoint: [""]
   needs: ['sbom']
   rules:
     - if: '$PIPELINE_MODE == "fast"'
@@ -28,7 +30,15 @@ sca-grype:
 
 sca-osv-scanner:
   stage: sca
-  image: ghcr.io/google/osv-scanner:latest
+  # ВНИМАНИЕ: официальный образ osv-scanner собран на distroless-базе —
+  # там может вообще не быть /bin/sh, тогда entrypoint: [""] снимет
+  # проблему с ENTRYPOINT, но GitLab всё равно не сможет выполнить
+  # script (нечем). Если джоба всё ещё падает после этого фикса —
+  # смотреть на error именно про отсутствующий sh, не про "unknown
+  # command", и тогда искать альтернативный тег образа с шеллом.
+  image:
+    name: ghcr.io/google/osv-scanner:latest
+    entrypoint: [""]
   rules:
     - if: '$PIPELINE_MODE == "fast"'
       when: never

@@ -5,7 +5,12 @@
 # структуры репозитория/тегов, см. docs/ssdlc-pipeline.md).
 antivirus:
   stage: antivirus
-  image: clamav/clamav:stable
+  # entrypoint: [""] — образ clamav/clamav заточен под запуск как сервис
+  # (свой стартовый скрипт для clamd), не под произвольный script: как
+  # у остальных "CLI-инструмент-образов" в этой директории.
+  image:
+    name: clamav/clamav:stable
+    entrypoint: [""]
   rules:
     - if: '$ANTIVIRUS == "true"'
   cache:
