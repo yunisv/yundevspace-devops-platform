@@ -29,16 +29,20 @@ container-scan-trivy:
     paths:
       - trivy-fs-report.json
 
+# Distroless-образ Anchore, тот же фикс, что и у sca-grype/sbom —
+# ставим бинарь через install-script на alpine, entrypoint override
+# тут не спасает (нет /bin/sh в образе вендора вообще).
 container-scan-grype:
   stage: container
-  image:
-    name: anchore/grype:latest
-    entrypoint: [""]
+  image: alpine:3.20
   rules:
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - exists:
         - Dockerfile
+  before_script:
+    - apk add --no-cache curl
+    - curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
   script:
     - grype dir:. -o json > grype-container-report.json || true
   artifacts:

@@ -2,15 +2,22 @@
 # sca.yml, needs: ['sbom']) и license-compliance в дальнейшем.
 # Пропускается в fast-режиме вместе с остальными "тяжёлыми" стадиями
 # (secret-scan/SAST всегда бегут, эта — нет).
+#
+# Образ anchore/syft — distroless, там вообще нет /bin/sh (не просто
+# "неправильный" ENTRYPOINT, как у gitleaks/trufflehog — entrypoint: [""]
+# тут не помогает, GitLab физически нечем выполнить script). Вместо
+# образа вендора — обычный alpine + официальный install-script,
+# ставящий бинарь syft.
 sbom:
   stage: sbom
-  image:
-    name: anchore/syft:latest
-    entrypoint: [""]
+  image: alpine:3.20
   rules:
     - if: '$PIPELINE_MODE == "fast"'
       when: never
     - when: on_success
+  before_script:
+    - apk add --no-cache curl
+    - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
   script:
     - syft dir:. -o cyclonedx-json=sbom.json
   artifacts:
