@@ -60,15 +60,27 @@ variables:
 # сабмодулей на ТОМ ЖЕ инстансе, для внешнего git-хоста не работает.
 # pre_get_sources_script выполняется ДО git clone/submodule init (то
 # есть раньше любого before_script/script — обычный before_script тут
-# не успел бы), подставляет токен в URL, только если GITHUB_TOKEN
-# реально задан на проекте — иначе не мешает проектам без такого
-# сабмодуля. GITHUB_TOKEN — CI/CD-переменная (Masked) на КОНКРЕТНОМ
-# проекте, у которого есть приватный сабмодуль на GitHub (не тут, не
-# общий на все — у разных проектов разные приватные сабмодули/токены).
+# не успел бы). Два независимых варианта, оба no-op пока соответствующие
+# переменные не заданы на проекте — можно не использовать ни один,
+# использовать один или оба сразу (для разных сабмодулей одного проекта):
+#
+# 1. SUBMODULE_MIRROR_FROM/TO — если у сабмодуля есть зеркало на ЭТОМ
+#    ЖЕ self-hosted GitLab (например, приватный GitHub-репо зеркалирован
+#    в devops/... на скорую руку) — подменяет URL на зеркало, авторизация
+#    через CI_JOB_TOKEN (автоматически, без секретов вообще).
+#    .gitmodules при этом канонично остаётся указывать на исходный хост
+#    (GitHub) — обычная разработка идёт как и шла, подмена только внутри
+#    CI. Предпочтительнее второго варианта, когда зеркало есть — совсем
+#    без секретов.
+# 2. GITHUB_TOKEN — если зеркала нет и нужен реальный доступ к самому
+#    GitHub (Masked CI/CD переменная на конкретном проекте).
 default:
   hooks:
     pre_get_sources_script:
       - |
+        if [ -n "$SUBMODULE_MIRROR_FROM" ] && [ -n "$SUBMODULE_MIRROR_TO" ]; then
+          git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@${SUBMODULE_MIRROR_TO}".insteadOf "$SUBMODULE_MIRROR_FROM"
+        fi
         if [ -n "$GITHUB_TOKEN" ]; then
           git config --global url."https://oauth2:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
         fi
