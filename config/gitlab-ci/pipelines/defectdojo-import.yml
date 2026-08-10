@@ -1,0 +1,48 @@
+# Собирает все артефакты сканов (какие реально появились — часть джоб
+# выше условные через rules: exists, их отчётов может не быть) и
+# импортирует каждый в DefectDojo своим scan_type. DEFECTDOJO_TOKEN и
+# DEFECTDOJO_ENGAGEMENT_ID — CI/CD-переменные проекта devops/pipelines
+# (Settings -> CI/CD -> Variables, замаскировать).
+#
+# scan_type подтверждены по docs.defectdojo.com/supported_tools:
+# Bandit Scan, Semgrep JSON Report, Gosec Scanner, Trufflehog Scan,
+# CycloneDX Scan, Trivy Scan, Checkov Scan. Для остального (pip-audit,
+# npm audit, retire.js, govulncheck, eslint-security, njsscan, ClamAV) —
+# нет подтверждённого нативного парсера на момент написания, используем
+# "Generic Findings Import" как fallback — проверить на месте, вдруг
+# появился нативный, тогда поменять одну строку.
+defectdojo-import:
+  stage: dd-import
+  image: alpine:3.20
+  rules:
+    - when: always
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      import_report() {
+        file="$1"
+        scan_type="$2"
+        if [ -f "$file" ]; then
+          echo "Импорт ${file} как \"${scan_type}\"..."
+          curl -sS -H "Authorization: Token ${DEFECTDOJO_TOKEN}" \
+            -F "file=@${file}" \
+            -F "scan_type=${scan_type}" \
+            -F "engagement=${DEFECTDOJO_ENGAGEMENT_ID}" \
+            "https://dojo.devops.2be.az/api/v2/import-scan/" > /dev/null || true
+        fi
+      }
+      import_report trufflehog-report.json "Trufflehog Scan"
+      import_report bandit-report.json "Bandit Scan"
+      import_report semgrep-report.json "Semgrep JSON Report"
+      import_report gosec-report.json "Gosec Scanner"
+      import_report eslint-security-report.json "Generic Findings Import"
+      import_report njsscan-report.json "Generic Findings Import"
+      import_report pip-audit-report.json "Generic Findings Import"
+      import_report npm-audit-report.json "Generic Findings Import"
+      import_report retirejs-report.json "Generic Findings Import"
+      import_report govulncheck-report.json "Generic Findings Import"
+      import_report sbom.json "CycloneDX Scan"
+      import_report trivy-fs-report.json "Trivy Scan"
+      import_report checkov-report.json "Checkov Scan"
+      import_report clamav-report.txt "Generic Findings Import"

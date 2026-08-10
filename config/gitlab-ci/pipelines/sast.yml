@@ -1,0 +1,92 @@
+# SAST — несколько сканеров на язык (не один на стек), каждый сам
+# решает по exists, запускаться ли. Могут пересекаться (напр. semgrep
+# гоняется и для Python, и для JS/TS) — так и задумано, разные движки
+# ловят разное.
+#
+# || true везде: сканеры возвращают ненулевой код при находках, это не
+# должно валить пайплайн — решение "падать или нет" на quality-gate,
+# не здесь.
+
+sast-bandit:
+  stage: sast
+  image: python:3.12-slim
+  rules:
+    - exists:
+        - '**/*.py'
+  before_script:
+    - pip install --quiet bandit
+  script:
+    - bandit -r . -f json -o bandit-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - bandit-report.json
+
+sast-semgrep:
+  stage: sast
+  image: semgrep/semgrep:latest
+  rules:
+    - exists:
+        - '**/*.py'
+        - '**/*.js'
+        - '**/*.ts'
+        - '**/*.php'
+        - '**/*.go'
+  script:
+    - semgrep --config auto --json --output semgrep-report.json . || true
+  artifacts:
+    when: always
+    paths:
+      - semgrep-report.json
+
+sast-gosec:
+  stage: sast
+  image: securego/gosec:latest
+  rules:
+    - exists:
+        - '**/*.go'
+  script:
+    - gosec -fmt=json -out=gosec-report.json ./... || true
+  artifacts:
+    when: always
+    paths:
+      - gosec-report.json
+
+sast-eslint-security:
+  stage: sast
+  image: node:20-alpine
+  rules:
+    - exists:
+        - '**/*.js'
+        - '**/*.ts'
+  before_script:
+    - npm install --no-save eslint eslint-plugin-security
+  script:
+    - >
+      npx eslint . --no-eslintrc
+      --plugin security
+      --rule '{"security/detect-object-injection":"warn","security/detect-eval-with-expression":"error","security/detect-non-literal-fs-filename":"warn"}'
+      --format json --output-file eslint-security-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - eslint-security-report.json
+
+# njsscan — специализированный статический анализатор под Node.js
+# (аналог bandit, но для JS/TS), пятый сканер для JS вместе с semgrep +
+# eslint-security (SAST) и npm-audit + retire.js (SCA, см. sca.yml).
+sast-njsscan:
+  stage: sast
+  image: python:3.12-slim
+  rules:
+    - exists:
+        - '**/*.js'
+        - '**/*.ts'
+  before_script:
+    - pip install --quiet njsscan
+  script:
+    - njsscan --json -o njsscan-report.json . || true
+  artifacts:
+    when: always
+    paths:
+      - njsscan-report.json
