@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 # Одноразово проставляет ci_config_path на ВСЕ уже существующие проекты,
-# чтобы они начали использовать универсальный роутер стека
-# (config/gitlab-ci/universal-pipeline.yml, см. docs/universal-pipeline.md)
-# без ручного добавления include в каждый .gitlab-ci.yml.
+# чтобы они начали использовать SSDLC-пайплайн
+# (config/gitlab-ci/ssdlc/ssdlc.yml, см. docs/ssdlc-pipeline.md) без
+# ручного добавления include в каждый .gitlab-ci.yml.
 #
-# Новые проекты, созданные ПОСЛЕ настройки System Hook (n8n workflow
-# "GitLab Auto CI Router", config/n8n/workflows/gitlab-auto-ci-router.json),
-# получают это автоматически при создании — этот скрипт нужен только
-# один раз, для проектов, которые уже существовали до хука.
+# Новые проекты, созданные ПОСЛЕ того, как в Admin Area -> Settings ->
+# CI/CD -> Continuous Integration and Deployment -> "Default CI/CD
+# configuration file" вписано то же значение (доступно в Free
+# self-managed, n8n/хуки для этого не нужны) — получают это
+# автоматически при создании. Этот скрипт нужен только один раз, для
+# проектов, которые уже существовали до того, как эта настройка была
+# вписана.
 #
 # Использование:
 #   GITLAB_TOKEN=<personal access token, права api, Owner/Admin на проекты> \
 #     ./scripts/backfill-ci-router.sh [namespace/ci-templates-project] [файл]
 #
-# По умолчанию: devops/ci-templates и universal-pipeline.yml — поменять
-# аргументами, если общий проект с шаблонами называется иначе.
+# По умолчанию: devops/ssdlc и ssdlc.yml — поменять аргументами, если
+# общий проект с policy-шлюзом называется иначе (или, если нужно
+# вернуться к старому билд-роутеру: ./scripts/backfill-ci-router.sh
+# devops/ci-templates universal-pipeline.yml).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -28,8 +33,8 @@ fi
 source .env
 : "${BASE_DOMAIN:?BASE_DOMAIN не задан в .env}"
 
-CI_TEMPLATES_PROJECT="${1:-devops/ci-templates}"
-CI_FILE="${2:-universal-pipeline.yml}"
+CI_TEMPLATES_PROJECT="${1:-devops/ssdlc}"
+CI_FILE="${2:-ssdlc.yml}"
 API="https://git.${BASE_DOMAIN}/api/v4"
 CI_CONFIG_PATH="${CI_FILE}@${CI_TEMPLATES_PROJECT}"
 

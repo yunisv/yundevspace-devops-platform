@@ -1,0 +1,60 @@
+# SCA / dependency scanning — уязвимости в сторонних библиотеках, то,
+# что SAST (смотрит только на свой код) не видит вообще.
+
+sca-pip-audit:
+  stage: sca
+  image: python:3.12-slim
+  rules:
+    - exists:
+        - '**/*.py'
+  before_script:
+    - pip install --quiet pip-audit
+  script:
+    - pip-audit -f json -o pip-audit-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - pip-audit-report.json
+
+sca-npm-audit:
+  stage: sca
+  image: node:20-alpine
+  rules:
+    - exists:
+        - package.json
+  script:
+    - npm audit --json > npm-audit-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - npm-audit-report.json
+
+sca-retirejs:
+  stage: sca
+  image: node:20-alpine
+  rules:
+    - exists:
+        - package.json
+  before_script:
+    - npm install --no-save retire
+  script:
+    - npx retire --outputformat json --outputpath retirejs-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - retirejs-report.json
+
+sca-govulncheck:
+  stage: sca
+  image: golang:1.23
+  rules:
+    - exists:
+        - '**/*.go'
+  before_script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+  script:
+    - govulncheck -json ./... > govulncheck-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - govulncheck-report.json

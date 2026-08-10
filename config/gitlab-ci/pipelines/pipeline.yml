@@ -1,0 +1,27 @@
+# Оркестратор — все файлы сканов в этом же репозитории (devops/pipelines),
+# поэтому local:, не project:/file:. Триггерится из ssdlc.yml (репозиторий
+# devops/ssdlc) межпроектным trigger:, см. docs/ssdlc-pipeline.md.
+#
+# На проекте devops/pipelines этот файл должен быть корневым
+# .gitlab-ci.yml (или ci_config_path проекта явно указывать на него) —
+# именно его выполняет GitLab, когда devops/ssdlc триггерит
+# `trigger: project: devops/pipelines`.
+stages:
+  - secret
+  - sast
+  - sca
+  - sbom
+  - container
+  - iac
+  - antivirus
+  - dd-import
+
+include:
+  - local: secret-scan.yml
+  - local: sast.yml
+  - local: sca.yml
+  - local: sbom.yml
+  - local: container-scan.yml
+  - local: iac-scan.yml
+  - local: antivirus.yml
+  - local: defectdojo-import.yml
