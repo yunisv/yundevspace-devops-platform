@@ -1,0 +1,12 @@
+# SBOM — опись состава проекта (для SCA/license-compliance дальше).
+# Без rules: exists — Syft сам разбирается, есть ли что описывать, и
+# просто выдаёт пустой/минимальный SBOM, если нет.
+sbom:
+  stage: sbom
+  image: anchore/syft:latest
+  script:
+    - syft dir:. -o cyclonedx-json=sbom.json
+  artifacts:
+    when: always
+    paths:
+      - sbom.json

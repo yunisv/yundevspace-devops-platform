@@ -1,0 +1,29 @@
+# Policy-шлюз — единственный файл в этом репозитории. Сам ничего не
+# сканирует: решает "когда" (только ветка main) и "с какими
+# параметрами" (переменные, проброшенные в devops/pipelines), сама
+# работа — в devops/pipelines/pipeline.yml.
+#
+# Это то, на что указывают проекты (ci_config_path / include), см.
+# docs/ssdlc-pipeline.md.
+#
+# В черновике было `include: - local: pipeline.yml` — local: работает
+# только внутри одного репозитория, а pipeline.yml лежит в ДРУГОМ
+# репозитории (devops/pipelines) — поэтому здесь trigger: project:,
+# не include: local:.
+stages:
+  - devsecops
+
+devsecops:
+  stage: devsecops
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  trigger:
+    project: devops/pipelines
+    branch: main
+    strategy: depend
+  variables:
+    # Единственный переключаемый параметр по черновику пользователя —
+    # antivirus. Добавить новый параметр: строка тут + rules: в
+    # соответствующей джобе в devops/pipelines (см. antivirus.yml как
+    # образец).
+    ANTIVIRUS: "true"

@@ -1,0 +1,24 @@
+# Единственный этап, явно опциональный через переменную (передаётся из
+# ssdlc.yml межпроектным trigger: variables:, не через GitLab CI/CD
+# Components inputs/spec — сознательно не делаем настоящий versioned
+# Component, обычная CI/CD переменная проще и не требует отдельной
+# структуры репозитория/тегов, см. docs/ssdlc-pipeline.md).
+antivirus:
+  stage: antivirus
+  image: clamav/clamav:stable
+  rules:
+    - if: '$ANTIVIRUS == "true"'
+  cache:
+    key: clamav-virus-db
+    paths:
+      - /var/lib/clamav
+  script:
+    # Обновление базы — небыстрое (~100MB+), поэтому кэшируем
+    # /var/lib/clamav между прогонами вместо того, чтобы качать заново
+    # каждый раз.
+    - freshclam || true
+    - clamscan -r --infected --no-summary -o clamav-report.txt . || true
+  artifacts:
+    when: always
+    paths:
+      - clamav-report.txt

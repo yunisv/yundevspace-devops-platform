@@ -1,0 +1,99 @@
+# Универсальный роутер пайплайнов: смотрит на маркер-файлы в корне
+# репозитория, определяет стек и запускает соответствующий официальный
+# шаблон GitLab (Go/PHP/Python/... — те же, что видны через
+#   GET /api/v4/templates/gitlab_ci_ymls
+# на самом инстансе) как child pipeline. Сами шаблоны — часть дистрибутива
+# GitLab, ничего не тянется с внешних серверов.
+#
+# Подключается в любом проекте одной строкой в его .gitlab-ci.yml:
+#   include:
+#     - project: 'devops/ci-templates'   # см. docs/universal-pipeline.md
+#       ref: main
+#       file: 'universal-pipeline.yml'
+#
+# Добавить новый стек: одна ветка detect + одна trigger-джоба.
+
+stages:
+  - detect
+  - build
+
+detect-stack:
+  stage: detect
+  image: alpine:3.20
+  script:
+    - |
+      STACK=unknown
+      if [ -f composer.json ]; then STACK=php
+      elif [ -f package.json ]; then STACK=node
+      elif [ -f requirements.txt ] || [ -f pyproject.toml ] || [ -f Pipfile ]; then STACK=python
+      elif [ -f AndroidManifest.xml ] || [ -f app/build.gradle ] || [ -f app/build.gradle.kts ]; then STACK=android
+      elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then STACK=kotlin
+      fi
+      echo "Определён стек: $STACK"
+      echo "STACK=$STACK" > stack.env
+  artifacts:
+    reports:
+      dotenv: stack.env
+
+trigger-php:
+  stage: build
+  needs: ['detect-stack']
+  rules:
+    - if: '$STACK == "php"'
+  trigger:
+    include:
+      - template: PHP.gitlab-ci.yml
+    strategy: depend
+
+trigger-node:
+  stage: build
+  needs: ['detect-stack']
+  rules:
+    - if: '$STACK == "node"'
+  trigger:
+    include:
+      - template: Nodejs.gitlab-ci.yml
+    strategy: depend
+
+trigger-python:
+  stage: build
+  needs: ['detect-stack']
+  rules:
+    - if: '$STACK == "python"'
+  trigger:
+    include:
+      - template: Python.gitlab-ci.yml
+    strategy: depend
+
+# Обычный Kotlin/JVM-проект (не Android) чаще всего собирается Gradle —
+# отдельного официального шаблона "Kotlin" у GitLab нет.
+trigger-kotlin:
+  stage: build
+  needs: ['detect-stack']
+  rules:
+    - if: '$STACK == "kotlin"'
+  trigger:
+    include:
+      - template: Gradle.gitlab-ci.yml
+    strategy: depend
+
+# Kotlin-проект с AndroidManifest.xml/app/build.gradle* — считаем Android-приложением.
+trigger-android:
+  stage: build
+  needs: ['detect-stack']
+  rules:
+    - if: '$STACK == "android"'
+  trigger:
+    include:
+      - template: Android.gitlab-ci.yml
+    strategy: depend
+
+unknown-stack:
+  stage: build
+  needs: ['detect-stack']
+  rules:
+    - if: '$STACK == "unknown"'
+  script:
+    - echo "Не удалось определить стек — не нашёл ни одного маркер-файла (composer.json / package.json / requirements.txt|pyproject.toml|Pipfile / build.gradle*)."
+    - echo "Добавь маркер-файл, или напиши свой .gitlab-ci.yml для этого проекта вместо include universal-pipeline.yml."
+    - exit 1

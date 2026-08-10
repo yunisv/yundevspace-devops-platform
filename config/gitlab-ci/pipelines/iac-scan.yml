@@ -1,0 +1,20 @@
+# IaC-скан — только если в репо реально есть Terraform/Kubernetes/Helm,
+# не на любой *.yaml (иначе триггерилось бы вообще всегда, у любого
+# проекта что-нибудь да есть в yaml).
+iac-scan:
+  stage: iac
+  image: bridgecrew/checkov:latest
+  rules:
+    - exists:
+        - '**/*.tf'
+        - '**/*.tfvars'
+        - 'k8s/**/*.yaml'
+        - 'k8s/**/*.yml'
+        - 'kubernetes/**/*.yaml'
+        - 'helm/**/*.yaml'
+  script:
+    - checkov -d . --output json --output-file-path checkov-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - checkov-report.json

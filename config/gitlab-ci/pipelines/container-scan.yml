@@ -1,0 +1,19 @@
+# Скан файловой системы репозитория (зависимости, Dockerfile) через
+# Trivy — тот же инструмент, что уже используется в docs/architecture.md
+# для скана собранного образа в registry. Этот job лёгкий и не требует
+# docker-in-docker (не билдит образ) — если нужен скан именно
+# СОБРАННОГО образа конкретного проекта, это уже покрыто существующим
+# `trivy image ...` шагом в собственном .gitlab-ci.yml проекта, см.
+# docs/architecture.md.
+container-scan:
+  stage: container
+  image: aquasec/trivy:latest
+  rules:
+    - exists:
+        - Dockerfile
+  script:
+    - trivy fs --format json -o trivy-fs-report.json . || true
+  artifacts:
+    when: always
+    paths:
+      - trivy-fs-report.json
