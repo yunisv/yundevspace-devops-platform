@@ -14,12 +14,19 @@
 #
 # Использование:
 #   GITLAB_TOKEN=<personal access token, права api, Owner/Admin на проекты> \
-#     ./scripts/backfill-ci-router.sh [namespace/ci-templates-project] [файл]
+#     ./scripts/backfill-ci-router.sh [namespace/ci-templates-project] [файл] [namespace/pipelines-project]
 #
 # По умолчанию: devops/ssdlc и ssdlc.yml — поменять аргументами, если
 # общий проект с policy-шлюзом называется иначе (или, если нужно
 # вернуться к старому билд-роутеру: ./scripts/backfill-ci-router.sh
 # devops/ci-templates universal-pipeline.yml).
+#
+# Третий аргумент (по умолчанию devops/pipelines) — проект с самими
+# сканерами (pipeline.yml, см. docs/ssdlc-pipeline.md). Он тоже
+# исключается из проставления, как и ci-templates-проект: если ему
+# самому проставить ci_config_path на ssdlc.yml, получится зацикливание
+# (ssdlc.yml триггерит devops/pipelines, а тот при таком ci_config_path
+# снова запустит ssdlc.yml и снова затриггерит сам себя).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -35,6 +42,7 @@ source .env
 
 CI_TEMPLATES_PROJECT="${1:-devops/ssdlc}"
 CI_FILE="${2:-ssdlc.yml}"
+PIPELINES_PROJECT="${3:-devops/pipelines}"
 API="https://git.${BASE_DOMAIN}/api/v4"
 CI_CONFIG_PATH="${CI_FILE}@${CI_TEMPLATES_PROJECT}"
 
@@ -53,6 +61,12 @@ while :; do
     # Не трогаем сам проект с шаблонами — ему указывать на себя незачем.
     if [ "$path" = "$CI_TEMPLATES_PROJECT" ]; then
       echo "  пропуск $path (это сам ci-templates)"
+      continue
+    fi
+    # И не трогаем проект с самими сканерами — иначе зацикливание
+    # (см. комментарий в шапке файла).
+    if [ "$path" = "$PIPELINES_PROJECT" ]; then
+      echo "  пропуск $path (это сам pipelines — у него свой ci_config_path, не ssdlc.yml)"
       continue
     fi
     curl -sS -X PUT -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
