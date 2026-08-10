@@ -1,9 +1,19 @@
 # Собирает все артефакты сканов (какие реально появились — часть джоб
 # условные через rules: exists/PIPELINE_MODE, их отчётов может не
 # быть) и импортирует каждый в DefectDojo своим scan_type.
-# DEFECTDOJO_TOKEN и DEFECTDOJO_ENGAGEMENT_ID — CI/CD-переменные
+#
+# Product/Engagement — НЕ статичный числовой ID (проектов много, один
+# Engagement на всех смешал бы находки разных проектов в одну кучу).
+# Вместо этого — auto_create_context: DefectDojo сам заводит
+# Product Type/Product/Engagement по имени, если их ещё нет (см.
+# docs.defectdojo.com/import_data/import_scan_files/api_pipeline_modelling).
+# SOURCE_PROJECT_PATH приходит из ssdlc.yml (там — $CI_PROJECT_PATH
+# исходного проекта; в devops/pipelines свой $CI_PROJECT_PATH был бы
+# просто "devops/pipelines", не тем проектом, который реально пушили).
+#
+# DEFECTDOJO_TOKEN — единственная обязательная CI/CD-переменная
 # проекта devops/pipelines (Settings -> CI/CD -> Variables,
-# замаскировать).
+# замаскировать). DEFECTDOJO_ENGAGEMENT_ID больше не нужен.
 #
 # scan_type подтверждены по docs.defectdojo.com/supported_tools:
 # Bandit Scan, Semgrep JSON Report, Gosec Scanner, Trufflehog Scan,
@@ -26,11 +36,14 @@ defectdojo-import:
         file="$1"
         scan_type="$2"
         if [ -f "$file" ]; then
-          echo "Импорт ${file} как \"${scan_type}\"..."
+          echo "Импорт ${file} как \"${scan_type}\" (продукт: ${SOURCE_PROJECT_PATH})..."
           curl -sS -H "Authorization: Token ${DEFECTDOJO_TOKEN}" \
             -F "file=@${file}" \
             -F "scan_type=${scan_type}" \
-            -F "engagement=${DEFECTDOJO_ENGAGEMENT_ID}" \
+            -F "auto_create_context=True" \
+            -F "product_type_name=SSDLC" \
+            -F "product_name=${SOURCE_PROJECT_PATH}" \
+            -F "engagement_name=CI/CD" \
             "https://dojo.devops.2be.az/api/v2/import-scan/" > /dev/null || true
         fi
       }

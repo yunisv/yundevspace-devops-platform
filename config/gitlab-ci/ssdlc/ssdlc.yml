@@ -44,3 +44,10 @@ devsecops:
     project: devops/pipelines
     branch: main
     strategy: depend
+  variables:
+    # Одинаково для всех трёх режимов — путь ИСХОДНОГО проекта
+    # (devops/pipelines видит только себя в своём собственном
+    # $CI_PROJECT_PATH, поэтому передаём явно). Используется в
+    # defectdojo-import.yml как имя Product — так находки разных
+    # проектов не мешаются в одном Engagement.
+    SOURCE_PROJECT_PATH: $CI_PROJECT_PATH
