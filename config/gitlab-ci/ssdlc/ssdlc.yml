@@ -1,32 +1,38 @@
 # Policy-шлюз — единственный файл в этом репозитории. Сам ничего не
 # сканирует: решает "когда" (branch/tag) и "с какими параметрами"
-# (PIPELINE_MODE + ANTIVIRUS, проброшенные в devops/pipelines), сама
-# работа — в devops/pipelines/pipeline.yml.
+# (PIPELINE_MODE + ANTIVIRUS), сама работа — в
+# devops/pipelines/pipeline.yml, подключается через include, не через
+# trigger.
 #
-# Это то, на что указывают проекты (ci_config_path / include), см.
+# ВАЖНО (было исправлено после живой поломки): раньше здесь стоял
+# `trigger: project: devops/pipelines` — это multi-project pipeline,
+# он запускает ОТДЕЛЬНЫЙ пайплайн в контексте проекта devops/pipelines
+# со своим собственным git checkout — сканеры реально проверяли
+# репозиторий devops/pipelines (наши YAML-файлы), а не код проекта,
+# который пушили. Подтверждено логом:
+# "Checking out ... in /builds/devops/pipelines/.git/".
+#
+# Правильный механизм — include: - project: (кросс-репозиторный
+# include, мёржит джобы из внешнего файла в ТЕКУЩИЙ пайплайн, git
+# checkout остаётся тем, что реально запушили). Из-за этого
+# SOURCE_PROJECT_PATH (костыль под trigger: variables:) тоже не нужен
+# — $CI_PROJECT_PATH и так корректен, раз всё выполняется в одном
+# пайплайне исходного проекта.
+#
+# Это то, на что указывают проекты (ci_config_path), см.
 # docs/ssdlc-pipeline.md.
 #
-# В черновике было `include: - local: pipeline.yml` — local: работает
-# только внутри одного репозитория, а pipeline.yml лежит в ДРУГОМ
-# репозитории (devops/pipelines) — поэтому здесь trigger: project:,
-# не include: local:.
-#
-# Три режима по ветке/тегу, у каждого свои variables (GitLab
-# поддерживает override переменных для каждого правила в rules:
-# отдельно — это не три джобы, а три условия одной):
+# Три режима по ветке/тегу — через workflow:rules: (глобальные
+# переменные пайплайна, GitLab поддерживает conditional variables
+# именно на этом уровне; per-job rules:variables тут не подходят, раз
+# джобы теперь не в отдельной триггер-джобе, а мёржатся напрямую):
 #   - тег              -> release: всё, включая antivirus
 #   - main              -> full: всё, кроме antivirus (тяжёлый — только
 #                          перед релизом, не на каждый push)
 #   - dev/feature/*      -> fast: только secret-scan + SAST, чтобы не
-#                          тормозить обычную разработку — SCA/SBOM/
-#                          container/IaC/antivirus пропускаются (гейт
-#                          на PIPELINE_MODE в соответствующих джобах в
-#                          devops/pipelines).
-stages:
-  - devsecops
-
-devsecops:
-  stage: devsecops
+#                          тормозить обычную разработку
+#   - всё остальное      -> пайплайн не создаётся вообще (when: never)
+workflow:
   rules:
     - if: '$CI_COMMIT_TAG'
       variables:
@@ -40,14 +46,16 @@ devsecops:
       variables:
         PIPELINE_MODE: "fast"
         ANTIVIRUS: "false"
-  trigger:
-    project: devops/pipelines
-    branch: main
-    strategy: depend
-  variables:
-    # Одинаково для всех трёх режимов — путь ИСХОДНОГО проекта
-    # (devops/pipelines видит только себя в своём собственном
-    # $CI_PROJECT_PATH, поэтому передаём явно). Используется в
-    # defectdojo-import.yml как имя Product — так находки разных
-    # проектов не мешаются в одном Engagement.
-    SOURCE_PROJECT_PATH: $CI_PROJECT_PATH
+    - when: never
+
+variables:
+  # Автоматически для ВСЕХ проектов через этот файл — без ручной
+  # CI/CD-переменной на каждый проект. Нужно, чтобы сканеры видели
+  # реальный код в git submodules (напр. usta_tap/frontend), а не
+  # пустую директорию-заглушку (GitLab по умолчанию их не чекаутит).
+  GIT_SUBMODULE_STRATEGY: recursive
+
+include:
+  - project: 'devops/pipelines'
+    ref: main
+    file: 'pipeline.yml'

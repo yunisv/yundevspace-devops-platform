@@ -7,9 +7,10 @@
 # Вместо этого — auto_create_context: DefectDojo сам заводит
 # Product Type/Product/Engagement по имени, если их ещё нет (см.
 # docs.defectdojo.com/import_data/import_scan_files/api_pipeline_modelling).
-# SOURCE_PROJECT_PATH приходит из ssdlc.yml (там — $CI_PROJECT_PATH
-# исходного проекта; в devops/pipelines свой $CI_PROJECT_PATH был бы
-# просто "devops/pipelines", не тем проектом, который реально пушили).
+# $CI_PROJECT_PATH — предопределённая переменная GitLab, берётся
+# напрямую (эта джоба подключена в исходный пайплайн через include: -
+# project: в ssdlc.yml, а не через trigger:, поэтому checkout — код
+# исходного проекта, и $CI_PROJECT_PATH корректен без всякого проброса).
 #
 # DEFECTDOJO_TOKEN — единственная обязательная CI/CD-переменная
 # проекта devops/pipelines (Settings -> CI/CD -> Variables,
@@ -36,13 +37,13 @@ defectdojo-import:
         file="$1"
         scan_type="$2"
         if [ -f "$file" ]; then
-          echo "Импорт ${file} как \"${scan_type}\" (продукт: ${SOURCE_PROJECT_PATH})..."
+          echo "Импорт ${file} как \"${scan_type}\" (продукт: ${CI_PROJECT_PATH})..."
           curl -sS -H "Authorization: Token ${DEFECTDOJO_TOKEN}" \
             -F "file=@${file}" \
             -F "scan_type=${scan_type}" \
             -F "auto_create_context=True" \
             -F "product_type_name=SSDLC" \
-            -F "product_name=${SOURCE_PROJECT_PATH}" \
+            -F "product_name=${CI_PROJECT_PATH}" \
             -F "engagement_name=CI/CD" \
             "https://dojo.devops.2be.az/api/v2/import-scan/" > /dev/null || true
         fi

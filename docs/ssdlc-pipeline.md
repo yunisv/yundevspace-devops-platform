@@ -5,13 +5,17 @@ SCA, SBOM, container/IaC-скан, antivirus, импорт в DefectDojo),
 собранный по схеме из двух репозиториев:
 
 - **`devops/ssdlc`** — policy-шлюз. Единственный файл — `ssdlc.yml`.
-  Ничего не сканирует сам, решает только "когда" (`rules:` по
+  Ничего не сканирует сам, решает только "когда" (`workflow:rules:` по
   ветке/тегу — три режима, см. ниже) и "с какими параметрами"
-  (`PIPELINE_MODE`/`ANTIVIRUS`), передаёт их дальше межпроектным
-  `trigger:`. Это то, на что указывают сами проекты (`ci_config_path`).
+  (`PIPELINE_MODE`/`ANTIVIRUS`), подключает `pipeline.yml` из другого
+  репозитория через `include: - project:`. Это то, на что указывают
+  сами проекты (`ci_config_path`).
 - **`devops/pipelines`** — вся реальная работа. `pipeline.yml` —
   оркестратор (стадии + `local:`-инклюды), плюс сами файлы сканеров —
-  всё в одном репозитории.
+  всё в одном репозитории. Это чисто "библиотека" файлов — GitLab
+  никогда не запускает pipeline ЭТОГО проекта напрямую, поэтому
+  собственный `ci_config_path`/`.gitlab-ci.yml` там не нужен вообще,
+  файлы просто читаются по имени через `include`.
 
 Не путать с [`docs/universal-pipeline.md`](universal-pipeline.md) —
 тот билд-роутер по стеку (детект языка → официальный GitLab-шаблон
@@ -35,14 +39,28 @@ SCA, SBOM, container/IaC-скан, antivirus, импорт в DefectDojo),
   версионируемой структуры репозитория (`templates/`, git-теги) и
   работает только при подключении через `include: - component: ...`.
   Сознательно не стали делать настоящий Component — сложнее, чем
-  нужно для этой задачи. Вместо этого — обычные CI/CD-переменные,
-  переданные через `trigger: variables:` (тот же уровень простоты, что
-  уже проверен на `universal-pipeline.yml`), и межпроектный
-  `trigger: project:` вместо `include: local:` (`local:` работает
-  только внутри одного репозитория, а `ssdlc.yml` и `pipeline.yml` —
-  в разных).
+  нужно для этой задачи. Вместо этого — обычные CI/CD-переменные
+  (`workflow:rules:variables`, тот же уровень простоты, что уже
+  проверен на `universal-pipeline.yml`).
 - `trufflesecurity -o truflehog.json` — не настоящая CLI-команда,
   заменено на `trufflehog filesystem . --json > trufflehog-report.json`.
+- **Более серьёзная архитектурная ошибка, найденная уже на живом
+  тестировании** (не из черновика — моя собственная): первая версия
+  `ssdlc.yml` подключала `devops/pipelines` через `trigger: project:
+  devops/pipelines` (multi-project pipeline). Это запускает ОТДЕЛЬНЫЙ
+  пайплайн в контексте `devops/pipelines`, со своим собственным git
+  checkout — сканеры реально проверяли репозиторий `devops/pipelines`
+  (просто набор YAML-файлов), а не код проекта, который пушили.
+  Подтвердилось логом: `Checking out ... in
+  /builds/devops/pipelines/.git/` вместо ожидаемого пути исходного
+  проекта. Из-за этого все находки были пустыми ("no package sources
+  found" и т.п.) — сканировался не тот репозиторий.
+  Исправлено на `include: - project: 'devops/pipelines' file:
+  'pipeline.yml'` — кросс-репозиторный include мёржит джобы из
+  внешнего файла В ТЕКУЩИЙ пайплайн, git checkout остаётся тем, что
+  реально запушили. Заодно избавились от костыля `SOURCE_PROJECT_PATH`
+  (был нужен только чтобы прокинуть путь через `trigger: variables:` —
+  с `include:` `$CI_PROJECT_PATH` и так корректен напрямую).
 
 ## Автоприменение — нативная настройка GitLab, без n8n
 
@@ -73,28 +91,34 @@ GITLAB_TOKEN=<personal access token, права api> \
 1. Создать проект `devops/ssdlc`, запушить туда
    `config/gitlab-ci/ssdlc/ssdlc.yml`.
 2. Создать проект `devops/pipelines`, запушить туда содержимое
-   `config/gitlab-ci/pipelines/` — `pipeline.yml` должен лежать как
-   корневой `.gitlab-ci.yml` этого проекта (или явно выставить
-   `ci_config_path` = `pipeline.yml` в его настройках) — именно его
-   выполняет GitLab, когда `ssdlc.yml` триггерит
-   `trigger: project: devops/pipelines`.
+   `config/gitlab-ci/pipelines/` под теми же именами файлов — этот
+   проект НЕ запускает свой собственный пайплайн, файлы читаются по
+   имени через `include:` из `ssdlc.yml`, так что переименовывать
+   `pipeline.yml` в `.gitlab-ci.yml` или трогать `ci_config_path` этого
+   проекта не нужно.
 3. На проекте `devops/pipelines` — CI/CD-переменная (Settings → CI/CD
    → Variables, замаскировать): `DEFECTDOJO_TOKEN`. Отдельный
    `DEFECTDOJO_ENGAGEMENT_ID` не нужен — см. ниже, почему.
 4. Вписать `ssdlc.yml@devops/ssdlc` в инстанс-настройку (см. выше) —
    для новых проектов, и/или прогнать `backfill-ci-router.sh` — для
    существующих.
-5. Тестовый push в любой проект (ветка `main`) → должен запуститься
-   `devsecops` job в самом проекте → триггернуть child-project pipeline
-   в `devops/pipelines` → пройти по стадиям → находки появиться в
-   DefectDojo.
+5. Тестовый push в любой проект (ветка `main`) → пайплайн ЭТОГО же
+   проекта (не отдельный child pipeline) должен пройти по всем стадиям
+   из `pipeline.yml` → находки появятся в DefectDojo. Проверить в логе
+   любой джобы (`Getting source from Git repository`), что checkout —
+   путь реального проекта, не `/builds/devops/pipelines/.git/`.
 
 ## Ветковые режимы (fast / full / release)
 
-`ssdlc.yml` определяет режим по ветке/тегу и передаёт его в
+`ssdlc.yml` определяет режим по ветке/тегу через `workflow:rules:` (не
+per-job `rules:` — раз джобы теперь подключаются напрямую через
+`include:`, а не через отдельную триггер-джобу, глобальные переменные
+пайплайна выставляются на уровне `workflow:`) и передаёт его в
 `PIPELINE_MODE` — джобы в `devops/pipelines`, которые не должны бежать
 на каждый push при обычной разработке, гейтятся первым пунктом в
-`rules:` на `PIPELINE_MODE == "fast"` → `when: never`.
+своих `rules:` на `PIPELINE_MODE == "fast"` → `when: never`. Ветка,
+которая не подходит ни под один из трёх режимов — пайплайн не
+создаётся вообще (`when: never` последним пунктом).
 
 | Триггер | `PIPELINE_MODE` | `ANTIVIRUS` | Что бежит |
 |---|---|---|---|
@@ -161,10 +185,10 @@ DAST (динамическое сканирование запущенного �
 `engagement_name` в теле запроса `import-scan`, см.
 `docs.defectdojo.com/import_data/import_scan_files/api_pipeline_modelling`):
 если Product с таким именем ещё нет — создаётся, если есть — импорт
-идёт туда же. `product_name` = `SOURCE_PROJECT_PATH` (путь исходного
-проекта, приходит из `ssdlc.yml`, где он есть в `$CI_PROJECT_PATH` —
-в `devops/pipelines` своего `$CI_PROJECT_PATH` для этого не хватит,
-там всегда будет "devops/pipelines", не реальный проект). Все находки
+идёт туда же. `product_name` = `$CI_PROJECT_PATH` (предопределённая
+переменная GitLab — корректна напрямую, без проброса, раз джобы
+подключены через `include:`, а не через `trigger:` на другой проект).
+Все находки
 у одного проекта — под общим `product_type_name=SSDLC`,
 `engagement_name=CI/CD` (постоянный, не разовый Engagement — типичный
 паттерн для автоматизированных CI/CD-сканов, находки копятся туда со
@@ -208,3 +232,14 @@ ClamAV) — не найден подтверждённый нативный па
 Добавить новый ветковый режим или поменять правила существующих —
 только в `ssdlc.yml`, `devops/pipelines` ничего не знает про ветки
 напрямую, реагирует только на `PIPELINE_MODE`/`ANTIVIRUS`.
+
+## Git submodules — автоматически для всех проектов
+
+Если у проекта есть submodules (например, отдельный репозиторий
+фронтенда, подключённый как submodule) — GitLab по умолчанию их НЕ
+чекаутит (`Skipping Git submodules setup` в логе), сканеры видят
+пустую директорию-заглушку вместо реального кода. Не нужно проставлять
+`GIT_SUBMODULE_STRATEGY` вручную на каждый проект (ни как CI/CD
+Variable в UI, ни тем более на группу) — это уже стоит в `ssdlc.yml`
+как глобальная `variables: GIT_SUBMODULE_STRATEGY: recursive`,
+подхватывается автоматически везде, где используется `ssdlc.yml`.
