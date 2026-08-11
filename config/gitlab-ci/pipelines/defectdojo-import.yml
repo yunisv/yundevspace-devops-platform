@@ -67,6 +67,7 @@ defectdojo-import:
             -H "Authorization: Token ${DEFECTDOJO_TOKEN}" \
             -F "file=@${file}" \
             -F "scan_type=${scan_type}" \
+            -F "test_title=${scan_type} (${file})" \
             -F "auto_create_context=True" \
             -F "product_type_name=SSDLC" \
             -F "product_name=${DD_PRODUCT}" \
