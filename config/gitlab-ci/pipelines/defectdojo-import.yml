@@ -33,17 +33,46 @@
 # файл. rules: гейтится SEC_ENABLE — тот же общий тумблер, что и у
 # secret-scan/sast/sca/sbom (см. их шапки).
 #
-# scan_type подтверждены по docs.defectdojo.com/supported_tools:
+# scan_type — сверены напрямую по исходникам парсеров
+# (github.com/DefectDojo/django-DefectDojo/blob/master/dojo/tools/*/parser.py,
+# get_scan_types()), не по устаревшему предположению "нет нативного
+# парсера, ставим Generic Findings Import" — таким предположением
+# раньше был помечен весь список ниже, и именно поэтому находки
+# grype/osv-scanner/pip-audit и т.д. молча импортировались как 0: у
+# Generic Findings Import свой строгий JSON-формат ({"findings": [...]}
+# с конкретными полями), а grype/osv-scanner отдают собственный формат,
+# так что импорт "проходил" (HTTP 200), но парсер не находил ни одной
+# записи, которую понимает.
+#
+# Подтверждённые нативные парсеры (используются напрямую):
 # Bandit Scan, Semgrep JSON Report, Gosec Scanner, Trufflehog Scan,
-# Gitleaks Scan, CycloneDX Scan, Trivy Scan, Checkov Scan. Trivy license-
-# отчёт тоже как "Trivy Scan" — тот же JSON-парсер Trivy разбирает и
-# vuln, и license секции своего вывода (подтверждено скриншотом реального
-# DefectDojo с отдельным Trivy Scan под лицензиями). Для остального
-# (pip-audit, npm audit, retire.js, govulncheck, eslint-security,
-# njsscan, Grype x2, OSV-Scanner, trivy config, ClamAV, hadolint) — нет
-# подтверждённого нативного парсера на момент написания, используем
-# "Generic Findings Import" как fallback — проверить на месте, вдруг
-# появился нативный, тогда поменять одну строку.
+# Gitleaks Scan, CycloneDX Scan, Checkov Scan, Trivy Scan (единый и для
+# fs, и для config/IaC, и для license-скана — один и тот же парсер
+# разбирает все секции trivy JSON-вывода), Anchore Grype (и под
+# sca-grype, и под container-scan-grype — тот же JSON-формат
+# независимо от sbom:/dir: источника), OSV Scan, pip-audit Scan,
+# Retire.js Scan, ESLint Scan (наш `eslint --format json` — ровно тот
+# массив {filePath, messages: [...]}, который парсер ожидает),
+# Hadolint Dockerfile check, NPM Audit v7+ Scan (не "NPM Audit Scan" —
+# та версия парсера принимает только вывод npm audit ДО v7 и явно
+# отклоняет отчёты с полем auditReportVersion; node:20-alpine — это
+# npm 10.x, формат v7+).
+#
+# Govulncheck Scanner V2 — вероятно верно (govulncheck начиная с 1.0
+# по умолчанию отдаёт потоковый JSON, под который сделан V2-парсер), но
+# не проверено живым импортом с реальными находками — если он тоже
+# покажет 0 при наличии реальных уязвимостей в go.sum, попробовать
+# "Govulncheck Scanner" (без V2).
+#
+# Не переведены на нативный (оставлены Generic Findings Import):
+# njsscan — подтверждённого парсера в DefectDojo не найдено (был лишь
+# фичареквест в issue #1824, статус реализации не подтверждён);
+# ClamAV — clamscan отдаёт обычный текстовый отчёт (.txt), а не JSON,
+# Generic Findings Import ожидает JSON — этот импорт, скорее всего,
+# either 0 findings, either HTTP-ошибка парсинга; если/когда антивирус
+# реально что-то найдёт, надо будет посмотреть на живой ответ и решить
+# отдельно (конвертировать в JSON вручную перед импортом, или найти
+# другой путь).
 defectdojo-import:
   stage: dd-import
   image: alpine:3.20
@@ -84,19 +113,19 @@ defectdojo-import:
       import_report bandit-report.json "Bandit Scan"
       import_report semgrep-report.json "Semgrep JSON Report"
       import_report gosec-report.json "Gosec Scanner"
-      import_report eslint-security-report.json "Generic Findings Import"
+      import_report eslint-security-report.json "ESLint Scan"
       import_report njsscan-report.json "Generic Findings Import"
       import_report sbom.json "CycloneDX Scan"
-      import_report grype-report.json "Generic Findings Import"
-      import_report osv-scanner-report.json "Generic Findings Import"
-      import_report pip-audit-report.json "Generic Findings Import"
-      import_report npm-audit-report.json "Generic Findings Import"
-      import_report retirejs-report.json "Generic Findings Import"
-      import_report govulncheck-report.json "Generic Findings Import"
+      import_report grype-report.json "Anchore Grype"
+      import_report osv-scanner-report.json "OSV Scan"
+      import_report pip-audit-report.json "pip-audit Scan"
+      import_report npm-audit-report.json "NPM Audit v7+ Scan"
+      import_report retirejs-report.json "Retire.js Scan"
+      import_report govulncheck-report.json "Govulncheck Scanner V2"
       import_report trivy-fs-report.json "Trivy Scan"
       import_report trivy-license-report.json "Trivy Scan"
-      import_report grype-container-report.json "Generic Findings Import"
+      import_report grype-container-report.json "Anchore Grype"
       import_report checkov-report.json "Checkov Scan"
-      import_report trivy-config-report.json "Generic Findings Import"
+      import_report trivy-config-report.json "Trivy Scan"
       import_report clamav-report.txt "Generic Findings Import"
-      import_report hadolint-report.json "Generic Findings Import"
+      import_report hadolint-report.json "Hadolint Dockerfile check"

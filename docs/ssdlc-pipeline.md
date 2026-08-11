@@ -282,16 +282,40 @@ DefectDojo; `SEC_CLEANUP_ENABLE` — не ясно из скриншота, чт
 
 ## DefectDojo scan_type
 
-Подтверждены по `docs.defectdojo.com/supported_tools`: `Bandit Scan`,
-`Semgrep JSON Report`, `Gosec Scanner`, `Trufflehog Scan`, `Gitleaks
-Scan`, `CycloneDX Scan`, `Trivy Scan` (уже используется в проекте),
-`Checkov Scan`. Для остального (pip-audit, npm audit, retire.js,
-govulncheck, ESLint, njsscan, Grype ×2, OSV-Scanner, `trivy config`,
-ClamAV) — не найден подтверждённый нативный парсер на момент
-написания, используется `Generic Findings Import` как fallback —
-свериться с `docs.defectdojo.com/supported_tools/parsers/` при
-реализации, вдруг появился нативный парсер, тогда поменять
-`import_report` вызов в `defectdojo-import.yml` на нужный `scan_type`.
+Изначально половина списка стояла на `Generic Findings Import` как
+fallback ("не найден подтверждённый парсер на момент написания") — на
+практике это оказалось молчаливым провалом: grype/osv-scanner/pip-audit
+и т.д. импортировались с HTTP 200, но 0 находок, потому что
+`Generic Findings Import` ждёт свой собственный JSON-формат
+(`{"findings": [...]}`), а не родной вывод инструмента. Найдено живьём
+на реальном прогоне (`sca-grype`/`container-scan-grype` показывали 0 в
+DefectDojo при том, что job явно что-то сканировал).
+
+Пофикшено — все scan_type сверены напрямую по исходникам парсеров
+(`github.com/DefectDojo/django-DefectDojo/blob/master/dojo/tools/*/parser.py`,
+метод `get_scan_types()`), не по документации (которая не всегда
+успевает за новыми парсерами):
+
+| Файл | scan_type |
+|---|---|
+| `bandit-report.json` | `Bandit Scan` |
+| `semgrep-report.json` | `Semgrep JSON Report` |
+| `gosec-report.json` | `Gosec Scanner` |
+| `trufflehog-report.json` | `Trufflehog Scan` |
+| `gitleaks-report.json` | `Gitleaks Scan` |
+| `sbom.json` | `CycloneDX Scan` |
+| `checkov-report.json` | `Checkov Scan` |
+| `trivy-fs-report.json`, `trivy-license-report.json`, `trivy-config-report.json` | `Trivy Scan` (один и тот же парсер для fs/license/config — различает секции по `Type`/`target_class` внутри самого JSON) |
+| `grype-report.json`, `grype-container-report.json` | `Anchore Grype` (один и тот же формат независимо от `sbom:`/`dir:` источника) |
+| `osv-scanner-report.json` | `OSV Scan` |
+| `pip-audit-report.json` | `pip-audit Scan` |
+| `retirejs-report.json` | `Retire.js Scan` |
+| `eslint-security-report.json` | `ESLint Scan` (наш `eslint --format json` уже даёт нужный формат) |
+| `hadolint-report.json` | `Hadolint Dockerfile check` |
+| `npm-audit-report.json` | `NPM Audit v7+ Scan` — **не** `NPM Audit Scan` (та версия парсера принимает только вывод npm audit ДО v7 и явно отклоняет отчёты с полем `auditReportVersion`; `node:20-alpine` — это npm 10.x, формат v7+) |
+| `govulncheck-report.json` | `Govulncheck Scanner V2` — вероятно верно (govulncheck 1.0+ по умолчанию отдаёт потоковый JSON, под который сделан V2), но не проверено живым импортом с реальными находками; если тоже покажет 0 при известных уязвимостях в `go.sum` — попробовать `Govulncheck Scanner` без V2 |
+| `njsscan-report.json` | `Generic Findings Import` (подтверждённого нативного парсера не найдено — был только feature request, issue #1824, статус реализации не подтверждён) |
+| `clamav-report.txt` | `Generic Findings Import` (clamscan отдаёт `.txt`, не JSON — этот импорт почти наверняка не распарсится вообще ни во что осмысленное; не критично, пока антивирус ничего не находит, но если найдёт — разбираться отдельно) |
 
 ## Добавить новый сканер/язык
 
