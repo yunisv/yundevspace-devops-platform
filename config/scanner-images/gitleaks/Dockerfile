@@ -13,7 +13,12 @@
 # и поправить путь ниже.
 FROM zricethezav/gitleaks:latest AS source
 
+# git — обязателен: `gitleaks detect` (без --no-git) сканирует через
+# git-историю и вызывает системный git-бинарь напрямую (не libgit2),
+# упало живьём в CI с "could not create Git cmd: exec: git: executable
+# file not found in $PATH" — у вендорского образа git был, в голом
+# alpine его нет по умолчанию.
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates git
 COPY --from=source /usr/bin/gitleaks /usr/local/bin/gitleaks
 ENTRYPOINT []
