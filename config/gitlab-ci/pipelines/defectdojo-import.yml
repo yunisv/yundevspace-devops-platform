@@ -12,6 +12,16 @@
 # project: в ssdlc.yml, а не через trigger:, поэтому checkout — код
 # исходного проекта, и $CI_PROJECT_PATH корректен без всякого проброса).
 #
+# engagement_name = "Pipeline #${CI_PIPELINE_ID}" — НЕ постоянный общий
+# "CI/CD" (было раньше): под каждый прогон пайплайна свой Engagement,
+# находки разных прогонов не смешиваются внутри одного Engagement.
+# Плата за это — Engagement-ов в Product со временем накопится много
+# (по одному на пайплайн), но каждый содержит находки только ОДНОГО
+# скана — если через несколько месяцев это станет мешать, штатная
+# DefectDojo-альтернатива — reimport-scan (обновляет один и тот же
+# Engagement/Test, сам закрывает пропавшие находки, не дублирует
+# оставшиеся), но это отдельная задача, не то, что просили сейчас.
+#
 # DEFECTDOJO_TOKEN — единственная обязательная CI/CD-переменная
 # проекта devops/pipelines (Settings -> CI/CD -> Variables,
 # замаскировать). DEFECTDOJO_ENGAGEMENT_ID больше не нужен.
@@ -47,19 +57,25 @@ defectdojo-import:
     - |
       DD_URL="${DEFECTDOJO_URL:-https://dojo.devops.2be.az}"
       DD_PRODUCT="${DOJO_PROJECT_NAME:-$CI_PROJECT_PATH}"
+      DD_ENGAGEMENT="Pipeline #${CI_PIPELINE_ID}"
       import_report() {
         file="$1"
         scan_type="$2"
         if [ -f "$file" ]; then
-          echo "Импорт ${file} как \"${scan_type}\" (продукт: ${DD_PRODUCT})..."
-          curl -sS -H "Authorization: Token ${DEFECTDOJO_TOKEN}" \
+          echo "Импорт ${file} как \"${scan_type}\" (продукт: ${DD_PRODUCT}, engagement: ${DD_ENGAGEMENT})..."
+          http_code=$(curl -sS -o /tmp/dd_response.json -w '%{http_code}' \
+            -H "Authorization: Token ${DEFECTDOJO_TOKEN}" \
             -F "file=@${file}" \
             -F "scan_type=${scan_type}" \
             -F "auto_create_context=True" \
             -F "product_type_name=SSDLC" \
             -F "product_name=${DD_PRODUCT}" \
-            -F "engagement_name=CI/CD" \
-            "${DD_URL}/api/v2/import-scan/" > /dev/null || true
+            -F "engagement_name=${DD_ENGAGEMENT}" \
+            "${DD_URL}/api/v2/import-scan/") || http_code="curl_failed"
+          case "$http_code" in
+            2??) echo "  OK (HTTP ${http_code})" ;;
+            *) echo "  ОШИБКА (HTTP ${http_code}), ответ DefectDojo:"; cat /tmp/dd_response.json 2>/dev/null; echo ;;
+          esac
         fi
       }
       import_report gitleaks-report.json "Gitleaks Scan"
