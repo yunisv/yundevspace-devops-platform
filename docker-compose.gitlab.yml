@@ -40,6 +40,21 @@ services:
         external_url 'https://git.${BASE_DOMAIN}'
         nginx['listen_port'] = 80
         nginx['listen_https'] = false
+        # TLS всегда терминируется на Traefik, GitLab'овский nginx никогда
+        # сам не говорит HTTPS — но по умолчанию он ПЕРЕЗАПИСЫВАЕТ входящий
+        # от Traefik заголовок X-Forwarded-Proto своим $scheme (тут это
+        # всегда "http", раз nginx['listen_https'] = false), так что Rails
+        # получает X-Forwarded-Proto: http и думает, что соединение не по
+        # HTTPS — из-за этого сессионная кука не получает Secure/правильный
+        # SameSite и теряется при кросс-доменном редиректе от Keycloak
+        # обратно на GitLab (ActionController::InvalidAuthenticityToken /
+        # "422: Sign-in using Keycloak auth failed", найдено живьём в
+        # production.log). Раз тут TLS снаружи есть ВСЕГДА (Traefik другого
+        # не пропускает), просто жёстко фиксируем оба заголовка.
+        nginx['proxy_set_headers'] = {
+          "X-Forwarded-Proto" => "https",
+          "X-Forwarded-Ssl" => "on"
+        }
         gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
         # Built-in Container Registry — the CI examples in docs/architecture.md
