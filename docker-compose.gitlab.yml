@@ -75,6 +75,16 @@ services:
         gitlab_rails['omniauth_enabled'] = true
         gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
         gitlab_rails['omniauth_block_auto_created_users'] = false
+        # Без этого GitLab при первом OmniAuth-логине пытается СОЗДАТЬ
+        # нового юзера с username = preferred_username из Keycloak — а
+        # аккаунт с логином yunis уже существует локально (обычный
+        # пароль), так что либо коллизия имени, либо GitLab заводит
+        # второй отдельный аккаунт вместо входа в существующий — в обоих
+        # случаях не то, что нужно. auto_link_user говорит GitLab'у
+        # привязать identity к УЖЕ существующему аккаунту по совпадению
+        # email — проверено вручную, email у Keycloak-yunis и локального
+        # GitLab-yunis совпадает один-в-один (veliyevyunis@gmail.com).
+        gitlab_rails['omniauth_auto_link_user'] = ['openid_connect']
         gitlab_rails['omniauth_providers'] = [
           {
             name: "openid_connect",
