@@ -65,7 +65,19 @@ sca-pip-audit:
   before_script:
     - pip install --quiet pip-audit
   script:
-    - pip-audit -f json -o pip-audit-report.json || true
+    # Без -r requirements.txt pip-audit проверяет ТЕКУЩЕЕ окружение —
+    # в данном случае это голый python:3.12-slim + сам pip-audit со
+    # своими зависимостями, а не реальные зависимости проекта. Находка
+    # на пакет pip/setuptools самого базового образа так вылезала бы
+    # одинаково на любом Python-проекте на этой платформе, независимо
+    # от requirements.txt — найдено живьём на usta_tap. -r сканирует
+    # файл напрямую (по метаданным PyPI), не требуя установки пакетов.
+    - |
+      if [ -f requirements.txt ]; then
+        pip-audit -r requirements.txt -f json -o pip-audit-report.json || true
+      else
+        pip-audit -f json -o pip-audit-report.json || true
+      fi
   artifacts:
     when: always
     paths:
