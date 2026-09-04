@@ -50,6 +50,18 @@ services:
       OIDC_CLIENT_ID: ${N8N_OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${N8N_OIDC_CLIENT_SECRET}
       OIDC_REDIRECT_URI: https://automation.${BASE_DOMAIN}/auth/oidc/callback
+      # Токен Telegram-бота и Plane API — читаются из $env внутри нод
+      # telegram-voice-commands.json (HTTP Request URL-expression'ы,
+      # код-ноды) вместо того, чтобы быть вписанными буквально в каждую
+      # ноду по отдельности — ротация токена (например, после
+      # компрометации бота) = поменять тут и в .env, ноды не трогать.
+      # N8N_BLOCK_ENV_ACCESS_IN_NODE=false — явно, чтобы $env точно был
+      # доступен в код-нодах/expression вне зависимости от дефолта
+      # конкретной версии n8n (в части версий community по умолчанию
+      # заблокирован из соображений безопасности).
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      PLANE_TOKEN: ${PLANE_TOKEN}
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
     volumes:
       - n8n-data:/home/node/.n8n
       - ./config/n8n/hooks.js:/home/node/.n8n/hooks.js:ro

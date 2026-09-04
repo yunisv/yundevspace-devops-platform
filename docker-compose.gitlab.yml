@@ -40,6 +40,21 @@ services:
         external_url 'https://git.${BASE_DOMAIN}'
         nginx['listen_port'] = 80
         nginx['listen_https'] = false
+        # TLS всегда терминируется на Traefik, GitLab'овский nginx никогда
+        # сам не говорит HTTPS — но по умолчанию он ПЕРЕЗАПИСЫВАЕТ входящий
+        # от Traefik заголовок X-Forwarded-Proto своим $scheme (тут это
+        # всегда "http", раз nginx['listen_https'] = false), так что Rails
+        # получает X-Forwarded-Proto: http и думает, что соединение не по
+        # HTTPS — из-за этого сессионная кука не получает Secure/правильный
+        # SameSite и теряется при кросс-доменном редиректе от Keycloak
+        # обратно на GitLab (ActionController::InvalidAuthenticityToken /
+        # "422: Sign-in using Keycloak auth failed", найдено живьём в
+        # production.log). Раз тут TLS снаружи есть ВСЕГДА (Traefik другого
+        # не пропускает), просто жёстко фиксируем оба заголовка.
+        nginx['proxy_set_headers'] = {
+          "X-Forwarded-Proto" => "https",
+          "X-Forwarded-Ssl" => "on"
+        }
         gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
         # Built-in Container Registry — the CI examples in docs/architecture.md
@@ -60,6 +75,16 @@ services:
         gitlab_rails['omniauth_enabled'] = true
         gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
         gitlab_rails['omniauth_block_auto_created_users'] = false
+        # Без этого GitLab при первом OmniAuth-логине пытается СОЗДАТЬ
+        # нового юзера с username = preferred_username из Keycloak — а
+        # аккаунт с логином yunis уже существует локально (обычный
+        # пароль), так что либо коллизия имени, либо GitLab заводит
+        # второй отдельный аккаунт вместо входа в существующий — в обоих
+        # случаях не то, что нужно. auto_link_user говорит GitLab'у
+        # привязать identity к УЖЕ существующему аккаунту по совпадению
+        # email — проверено вручную, email у Keycloak-yunis и локального
+        # GitLab-yunis совпадает один-в-один (veliyevyunis@gmail.com).
+        gitlab_rails['omniauth_auto_link_user'] = ['openid_connect']
         gitlab_rails['omniauth_providers'] = [
           {
             name: "openid_connect",
@@ -70,7 +95,19 @@ services:
               response_type: "code",
               issuer: "https://sso.${BASE_DOMAIN}/realms/${KEYCLOAK_REALM}",
               discovery: true,
-              client_auth_method: "query",
+              # "query" (client_id/secret как query-параметры) не входит в
+              # token_endpoint_auth_methods_supported у Keycloak (проверено
+              # живьём через .well-known/openid-configuration:
+              # client_secret_basic/client_secret_post/private_key_jwt/
+              # tls_client_auth/client_secret_jwt — "query" среди них нет) —
+              # Keycloak должен отклонять обмен code на токен этим методом,
+              # без внятной ошибки долетающей до GitLab (тот просто рендерит
+              # generic "422: Sign-in using Keycloak auth failed", найдено
+              # живьём: discovery проходит 200 OK, сессии в Keycloak
+              # успешно создаются — код долетает, а вот сам token exchange
+              # молча не проходит). client_secret_basic — то, что Keycloak
+              # реально ждёт по умолчанию у confidential-клиента.
+              client_auth_method: "basic",
               uid_field: "preferred_username",
               client_options: {
                 identifier: "${GITLAB_OIDC_CLIENT_ID}",

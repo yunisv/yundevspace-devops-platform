@@ -178,7 +178,7 @@ GITLAB_TOKEN=<personal access token, права api> \
 | `iac` | `iac-scan-checkov` | не fast, есть `*.tf`/`k8s/`/`kubernetes/`/`helm/` | Checkov |
 | | `iac-scan-trivy` | не fast, тот же exists | `trivy config` |
 | `antivirus` | `antivirus` | `$ANTIVIRUS == "true"` (только на тегах) | ClamAV |
-| `dd-import` | `defectdojo-import` | всегда | curl-импорт всех найденных отчётов в DefectDojo |
+| `dd-import` | `defectdojo-import` | `$SEC_ENABLE != "false"` | curl-импорт всех найденных отчётов в DefectDojo |
 
 Для Python получается 3 сканера (bandit + semgrep + pip-audit) плюс
 универсальные grype/osv-scanner, для JS/TS — 5 языко-специфичных
@@ -199,6 +199,56 @@ DAST (динамическое сканирование запущенного �
 универсализируется так же просто; можно добавить отдельным
 опциональным этапом позже.
 
+## Переменные-тумблеры (SEC_ENABLE и т.д.)
+
+По образцу реального enterprise-пайплайна коллеги (там джоба
+`Devsecops:` принимает набор CI/CD-переменных для точечного
+включения/выключения категорий сканов) — добавлен такой же гейтинг
+через обычные CI/CD-переменные проекта (Settings -> CI/CD ->
+Variables), НЕЗАВИСИМО от `pipeline_mode`/`$[[ inputs.x ]]` (см. ниже,
+почему это два разных механизма).
+
+| Переменная | Что гейтит | По умолчанию |
+|---|---|---|
+| `SEC_ENABLE` | весь SSDLC-пайплайн целиком (все стадии кроме отключаемых по отдельности) | не задана = включено |
+| `SECRETS_SCAN_ENABLE` | `secret-scan.yml` (gitleaks, trufflehog) | не задана = включено |
+| `CODE_SCAN_ENABLE` | `sast.yml` (все 5 джоб) | не задана = включено |
+| `SCA_ENABLE` | `sca.yml` (все 6 джоб) и `sbom.yml` (sbom фидит только sca-grype) | не задана = включено |
+| `DEFECTDOJO_URL` | `defectdojo-import.yml` — куда импортировать | не задана = `https://dojo.devops.2be.az` |
+| `DOJO_PROJECT_NAME` | `defectdojo-import.yml` — имя Product в DefectDojo | не задана = `$CI_PROJECT_PATH` |
+
+Переменная не задана на проекте — поведение как раньше (всё включено,
+дефолтный DefectDojo). Чтобы выключить, например, SCA на конкретном
+проекте: выставить `SCA_ENABLE=false` в Settings -> CI/CD -> Variables
+этого проекта — джобы `sca-*`/`sbom` пропустятся с `when: never`, в
+логе пайплайна будут видны как skipped.
+
+**Это не замена `pipeline_mode`, а дополнение** — два независимых
+способа гейтить джобы:
+- `pipeline_mode` (`fast`/`full`/`release`, через `spec:inputs:` в
+  `pipeline.yml`) — решает АВТОМАТИЧЕСКИ, по ветке/тегу, что должно
+  бежать в принципе (fast на dev/feature, full на main, release на
+  тегах).
+- `SEC_ENABLE`/`SECRETS_SCAN_ENABLE`/`CODE_SCAN_ENABLE`/`SCA_ENABLE` —
+  РУЧНОЙ override поверх этого на конкретном проекте (например, у
+  легаси-репозитория временно отключить шумный SCA, не трогая общую
+  политику веток).
+
+**Что НЕ перенесено из скриншота коллеги и почему**: `SEC_PTAI`,
+`SEC_CODEQL` — отдельные сканеры (PT AI, CodeQL), которых в нашем
+наборе инструментов нет; `SEC_DUP_FP` — дедупликация false-positive
+внутри DefectDojo, требует отдельной логики на стороне DefectDojo,
+которую мы не настраивали; `SEC_TASK_CREATOR` — автосоздание тасков
+(видимо в Jira/трекере коллеги), у нас нет такой интеграции;
+`SEC_GITLAB_EXPORT` — экспорт в нативный GitLab Security Dashboard
+формат (`gl-sast-report.json` и т.п.), у нас отчёты идут только в
+DefectDojo; `SEC_CLEANUP_ENABLE` — не ясно из скриншота, что именно
+чистит (вероятно временные артефакты/старые сканы), нет эквивалентной
+логики. Добавлять переменные без реальной функциональности за ними —
+создавать иллюзию несуществующей возможности, поэтому осознанно
+пропущены; если понадобится что-то из этого — реализовывать как
+отдельную задачу.
+
 ## Product/Engagement в DefectDojo — авто, без ручного ID
 
 Изначально был один статичный `DEFECTDOJO_ENGAGEMENT_ID` на всех — но
@@ -212,11 +262,19 @@ DAST (динамическое сканирование запущенного �
 идёт туда же. `product_name` = `$CI_PROJECT_PATH` (предопределённая
 переменная GitLab — корректна напрямую, без проброса, раз джобы
 подключены через `include:`, а не через `trigger:` на другой проект).
-Все находки
-у одного проекта — под общим `product_type_name=SSDLC`,
-`engagement_name=CI/CD` (постоянный, не разовый Engagement — типичный
-паттерн для автоматизированных CI/CD-сканов, находки копятся туда со
-временем, не как time-boxed pentest-engagement).
+Все находки у одного проекта — под общим `product_type_name=SSDLC`.
+
+`engagement_name = "Pipeline #${CI_PIPELINE_ID}"` — свой Engagement на
+КАЖДЫЙ прогон пайплайна (раньше был один постоянный `"CI/CD"` на все
+прогоны сразу — находки разных сканов со временем смешивались внутри
+одного Engagement). Теперь находки одного прогона изолированы от
+других — но и Engagement-ов в Product со временем накопится много
+(по одному на пайплайн, не переиспользуются). Если это станет неудобно
+— штатная DefectDojo-альтернатива — `reimport-scan` вместо
+`import-scan`: обновляет один и тот же Engagement/Test, сам закрывает
+находки, которые пропали при повторном скане, не дублирует то, что уже
+есть — но это отдельная задача (переход на неё меняет семантику: не
+"каждый прогон = снимок", а "текущее состояние проекта").
 
 Практический эффект: ничего не нужно заранее заводить в DefectDojo
 руками под новый проект — первый же прогон пайплайна сам создаст для
@@ -224,16 +282,40 @@ DAST (динамическое сканирование запущенного �
 
 ## DefectDojo scan_type
 
-Подтверждены по `docs.defectdojo.com/supported_tools`: `Bandit Scan`,
-`Semgrep JSON Report`, `Gosec Scanner`, `Trufflehog Scan`, `Gitleaks
-Scan`, `CycloneDX Scan`, `Trivy Scan` (уже используется в проекте),
-`Checkov Scan`. Для остального (pip-audit, npm audit, retire.js,
-govulncheck, ESLint, njsscan, Grype ×2, OSV-Scanner, `trivy config`,
-ClamAV) — не найден подтверждённый нативный парсер на момент
-написания, используется `Generic Findings Import` как fallback —
-свериться с `docs.defectdojo.com/supported_tools/parsers/` при
-реализации, вдруг появился нативный парсер, тогда поменять
-`import_report` вызов в `defectdojo-import.yml` на нужный `scan_type`.
+Изначально половина списка стояла на `Generic Findings Import` как
+fallback ("не найден подтверждённый парсер на момент написания") — на
+практике это оказалось молчаливым провалом: grype/osv-scanner/pip-audit
+и т.д. импортировались с HTTP 200, но 0 находок, потому что
+`Generic Findings Import` ждёт свой собственный JSON-формат
+(`{"findings": [...]}`), а не родной вывод инструмента. Найдено живьём
+на реальном прогоне (`sca-grype`/`container-scan-grype` показывали 0 в
+DefectDojo при том, что job явно что-то сканировал).
+
+Пофикшено — все scan_type сверены напрямую по исходникам парсеров
+(`github.com/DefectDojo/django-DefectDojo/blob/master/dojo/tools/*/parser.py`,
+метод `get_scan_types()`), не по документации (которая не всегда
+успевает за новыми парсерами):
+
+| Файл | scan_type |
+|---|---|
+| `bandit-report.json` | `Bandit Scan` |
+| `semgrep-report.json` | `Semgrep JSON Report` |
+| `gosec-report.json` | `Gosec Scanner` |
+| `trufflehog-report.json` | `Trufflehog Scan` |
+| `gitleaks-report.json` | `Gitleaks Scan` |
+| `sbom.json` | `CycloneDX Scan` |
+| `checkov-report.json` | `Checkov Scan` |
+| `trivy-fs-report.json`, `trivy-license-report.json`, `trivy-config-report.json` | `Trivy Scan` (один и тот же парсер для fs/license/config — различает секции по `Type`/`target_class` внутри самого JSON) |
+| `grype-report.json`, `grype-container-report.json` | `Anchore Grype` (один и тот же формат независимо от `sbom:`/`dir:` источника) |
+| `osv-scanner-report.json` | `OSV Scan` |
+| `pip-audit-report.json` | `pip-audit Scan` |
+| `retirejs-report.json` | `Retire.js Scan` |
+| `eslint-security-report.json` | `ESLint Scan` (наш `eslint --format json` уже даёт нужный формат) |
+| `hadolint-report.json` | `Hadolint Dockerfile check` |
+| `npm-audit-report.json` | `NPM Audit v7+ Scan` — **не** `NPM Audit Scan` (та версия парсера принимает только вывод npm audit ДО v7 и явно отклоняет отчёты с полем `auditReportVersion`; `node:20-alpine` — это npm 10.x, формат v7+) |
+| `govulncheck-report.json` | `Govulncheck Scanner V2` — вероятно верно (govulncheck 1.0+ по умолчанию отдаёт потоковый JSON, под который сделан V2), но не проверено живым импортом с реальными находками; если тоже покажет 0 при известных уязвимостях в `go.sum` — попробовать `Govulncheck Scanner` без V2 |
+| `njsscan-report.json` | `Generic Findings Import` (подтверждённого нативного парсера не найдено — был только feature request, issue #1824, статус реализации не подтверждён) |
+| `clamav-report.txt` | `Generic Findings Import` (clamscan отдаёт `.txt`, не JSON — этот импорт почти наверняка не распарсится вообще ни во что осмысленное; не критично, пока антивирус ничего не находит, но если найдёт — разбираться отдельно) |
 
 ## Добавить новый сканер/язык
 

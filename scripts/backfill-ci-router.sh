@@ -14,7 +14,7 @@
 #
 # Использование:
 #   GITLAB_TOKEN=<personal access token, права api, Owner/Admin на проекты> \
-#     ./scripts/backfill-ci-router.sh [namespace/ci-templates-project] [файл] [namespace/pipelines-project]
+#     ./scripts/backfill-ci-router.sh [namespace/ci-templates-project] [файл] [namespace/pipelines-project] [namespace/scanner-images-project]
 #
 # По умолчанию: devops/ssdlc и ssdlc.yml — поменять аргументами, если
 # общий проект с policy-шлюзом называется иначе (или, если нужно
@@ -27,6 +27,13 @@
 # самому проставить ci_config_path на ssdlc.yml, получится зацикливание
 # (ssdlc.yml триггерит devops/pipelines, а тот при таком ci_config_path
 # снова запустит ssdlc.yml и снова затриггерит сам себя).
+#
+# Четвёртый аргумент (по умолчанию devops/scanner-images) — проект с
+# Dockerfile'ами и Kaniko-джобами для пересобранных образов сканеров
+# (см. docs/scanner-images.md). У него свой .gitlab-ci.yml с
+# build-gitleaks/build-grype/... (`when: manual`) — если проставить
+# сюда ci_config_path на ssdlc.yml, эти джобы исчезнут, заменившись
+# security-сканами, которым тут нечего сканировать.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -43,6 +50,7 @@ source .env
 CI_TEMPLATES_PROJECT="${1:-devops/ssdlc}"
 CI_FILE="${2:-ssdlc.yml}"
 PIPELINES_PROJECT="${3:-devops/pipelines}"
+SCANNER_IMAGES_PROJECT="${4:-devops/scanner-images}"
 API="https://git.${BASE_DOMAIN}/api/v4"
 CI_CONFIG_PATH="${CI_FILE}@${CI_TEMPLATES_PROJECT}"
 
@@ -67,6 +75,12 @@ while :; do
     # (см. комментарий в шапке файла).
     if [ "$path" = "$PIPELINES_PROJECT" ]; then
       echo "  пропуск $path (это сам pipelines — у него свой ci_config_path, не ssdlc.yml)"
+      continue
+    fi
+    # И не трогаем проект с образами сканеров — у него свой
+    # .gitlab-ci.yml с build-* джобами, не security-сканы.
+    if [ "$path" = "$SCANNER_IMAGES_PROJECT" ]; then
+      echo "  пропуск $path (это scanner-images — у него свой .gitlab-ci.yml, не ssdlc.yml)"
       continue
     fi
     curl -sS -X PUT -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
