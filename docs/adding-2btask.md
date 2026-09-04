@@ -22,7 +22,7 @@ Compose — `taskboard`, имена томов, package id Android-прилож�
 патч поверх `docker-compose.yml` для интеграции с Traefik/Homepage,
 как и остальные сервисы платформы.
 
-Заменяет Plane на том же поддомене `pm.${BASE_DOMAIN}` — Plane при этом
+Заменяет Plane на том же поддомене `2btask.${BASE_DOMAIN}` — Plane при этом
 демонтируется (см. шаг 0).
 
 ## 0. Снести Plane
@@ -48,8 +48,8 @@ cd /opt/plane && rm -rf plane-app   # опционально, требует sud
 |---|---|
 | Client ID | `2btask` |
 | Client authentication | **On** |
-| Valid redirect URIs | `https://pm.${BASE_DOMAIN}/auth/callback` |
-| Web origins | `https://pm.${BASE_DOMAIN}` |
+| Valid redirect URIs | `https://2btask.${BASE_DOMAIN}/auth/callback` |
+| Web origins | `https://2btask.${BASE_DOMAIN}` |
 
 Сохранить → вкладка **Credentials** → скопировать **Client Secret**,
 он понадобится в шаге 3.
@@ -89,7 +89,7 @@ JWT_SECRET=<python -c "import secrets; print(secrets.token_urlsafe(48))">
 ACCESS_TOKEN_TTL_MINUTES=720
 BCRYPT_ROUNDS=12
 
-CORS_ORIGINS=https://pm.${BASE_DOMAIN}
+CORS_ORIGINS=https://2btask.${BASE_DOMAIN}
 
 # Первый запуск заводит администратора и накатывает миграции.
 # Демо-данные (2 отдела/3 сотрудника/задачи) на проде не нужны.
@@ -106,7 +106,7 @@ SSO_ENABLED=true
 SSO_ISSUER_URL=https://sso.${BASE_DOMAIN}/realms/devops
 SSO_CLIENT_ID=2btask
 SSO_CLIENT_SECRET=<секрет из шага 1>
-SSO_REDIRECT_URI=https://pm.${BASE_DOMAIN}/auth/callback
+SSO_REDIRECT_URI=https://2btask.${BASE_DOMAIN}/auth/callback
 ```
 
 **Не** поднимать профиль `sso` из `docker-compose.yml` (свой встроенный
@@ -144,6 +144,13 @@ services:
 
   server:
     ports: !reset []       # /docs при необходимости — docker exec/SSH-туннель
+    networks:
+      - default
+      - edge          # без этого — httpx.ConnectTimeout на discovery
+                       # sso.${BASE_DOMAIN} (тот же hairpin, что и у
+                       # oauth2-proxy/gitlab-runner в docker-compose.yml):
+                       # `server` дёргает Keycloak сам (build_authorization_url,
+                       # exchange_code_for_user), не через браузер клиента
 
   client:
     ports: !reset []       # наружу только через Traefik
@@ -156,14 +163,14 @@ services:
       # сидит только в edge — без явного указания сети он может выбрать
       # недостижимую и зависнуть на 30s/504 (та же грабля, что в adding-plane.md).
       - traefik.docker.network=devops_edge
-      - traefik.http.routers.2btask.rule=Host(`pm.${BASE_DOMAIN}`)
+      - traefik.http.routers.2btask.rule=Host(`2btask.${BASE_DOMAIN}`)
       - traefik.http.routers.2btask.entrypoints=websecure
       - traefik.http.routers.2btask.middlewares=internal-only@file
       - traefik.http.services.2btask.loadbalancer.server.port=80
       - homepage.group=Development
       - homepage.name=2btask
       - homepage.icon=si-checkmarx.png
-      - homepage.href=https://pm.${BASE_DOMAIN}
+      - homepage.href=https://2btask.${BASE_DOMAIN}
       - homepage.description=Учёт задач и трудозатрат
 
 networks:
@@ -192,10 +199,10 @@ docker compose ps        # все Up/healthy (имена контейнеров 
 docker exec devops-platform-traefik-1 wget -T 5 -qO- http://taskboard-client-1/ >/dev/null && echo OK
 
 # 2. Снаружи (с пира NetBird)
-curl -sI https://pm.${BASE_DOMAIN} | head -1
+curl -sI https://2btask.${BASE_DOMAIN} | head -1
 ```
 
-Открыть `https://pm.${BASE_DOMAIN}` — форма входа должна показывать
+Открыть `https://2btask.${BASE_DOMAIN}` — форма входа должна показывать
 кнопку Keycloak (её видимость определяется `GET /api/auth/sso/status`
 на фронте, публичная проба). Войти паролем администратора, сразу
 сменить пароль, завести реальных сотрудников с их корпоративными email —

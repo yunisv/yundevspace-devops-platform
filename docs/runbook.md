@@ -22,7 +22,7 @@
 | Ollama | — (внутренний, только для n8n) | локальный LLM для AI-агентов, без публичного роута | 11434 | `docker-compose.ollama.yml`, `docs/local-llm.md` |
 | Homepage | `dash.` | стартовая страница со всеми сервисами (auto-discovery по docker-лейблам) | 3000 | `docker-compose.dashboard.yml` |
 | oauth2-proxy | (обслуживает `dash.`) | SSO-гейт перед Homepage через Keycloak | 4180 | `docker-compose.dashboard.yml` |
-| 2btask | `pm.` | issue tracking / PM, свой сервис (репозиторий `yunisv/2btask`), SSO через Keycloak platform-realm `devops` | 80 (client) | `docs/adding-2btask.md` |
+| 2btask | `2btask.` | issue tracking / PM, свой сервис (репозиторий `yunisv/2btask`), SSO через Keycloak platform-realm `devops` | 80 (client) | `docs/adding-2btask.md` |
 | DefectDojo | `dojo.` | агрегация находок SAST/DAST/SCA | — | `docs/adding-defectdojo-harbor.md` (официальный установщик) |
 | NetBird (control plane) | `netbird.` — **на отдельном сервере** | единственная точка входа в платформу | — | `docs/vpn-netbird.md` |
 
@@ -69,12 +69,12 @@ middleware `internal-only@file` — отвечает только пирам с�
 | ✅ | SSH: непривилегированный пользователь + ключ + `PermitRootLogin no` |
 | ✅ | Hetzner Cloud Firewall на DevPlat — deny-all inbound, проверено `Test-NetConnection`/`nmap` снаружи |
 | ⬜ | Cron для `scripts/backup.sh` + копирование архивов с сервера |
-| ✅ | 2btask заменяет Plane на `pm.devops.2be.az` (2026-09-04) — Plane снесён (`down -v`), 2btask поднят (`taskboard-db/server/client`), вход паролем проверен вживую. SSO пока выключен (`SSO_ENABLED=false`) — клиент в Keycloak ещё не создан, см. `docs/adding-2btask.md` |
+| ✅ | 2btask заменяет Plane на `2btask.devops.2be.az` (2026-09-04) — Plane снесён (`down -v`), 2btask поднят (`taskboard-db/server/client`), вход паролем и через Keycloak (client `2btask`, realm `devops`) проверены вживую. `server` подключён к `devops_edge` — без этого discovery Keycloak падал в hairpin-таймаут, см. `docs/adding-2btask.md` |
 | ✅ | DefectDojo — установлен, работает за Traefik (`dojo.devops.2be.az`) |
 | ✅ | n8n: workflow `Alerts_TG` (Webhook → Code → Telegram) на `/webhook/alertmanager`, проверен вживую |
 | ✅ | Первый проект в GitLab (`usta_tap`) + пайплайн реально подхвачен раннером и выполняется |
 | ✅ | GitLab-пайплайн импортирует находки SAST/secret-detection в DefectDojo |
-| ✅ | Единый вход через Keycloak — GitLab (нативный OIDC), Grafana (нативный OIDC), n8n (сторонний `n8n-oidc`, см. `docs/service-sso.md` про риски при апдейте образа). 2btask — тоже нативный OIDC, но client в Keycloak ещё не создан (⬜, см. строку выше) |
+| ✅ | Единый вход через Keycloak — GitLab (нативный OIDC), Grafana (нативный OIDC), n8n (сторонний `n8n-oidc`, см. `docs/service-sso.md` про риски при апдейте образа), 2btask (нативный OIDC, `docs/adding-2btask.md`) |
 | ⬜ | NetBird Access Control (пока не настроено — актуально, когда подключится больше людей) |
 | ✅ | AI-агенты в n8n (`docs/ai-agents-roadmap.md`) — пункт 2 (триаж находок DefectDojo) полностью работает end-to-end на реальном сервере: локальная LLM (Ollama, Qwen2.5 14B, `docs/local-llm.md`) → заметки с обоснованием + обновление severity/tags в DefectDojo → создание issue в GitLab для Critical, проверено вживую (`docs/ai-agent-defectdojo-triage.md`). Пункты 1/3/4/5 — по плану дальше. |
 
