@@ -56,7 +56,7 @@ API Tokens — не старая `dns.hetzner.com`, токены оттуда н
 wildcard `*.${BASE_DOMAIN}`, иначе A-записи на каждый поддомен:
 
 `git`, `registry`, `sso`, `traefik`, `grafana`, `prometheus`, `alerts`,
-`automation`, `dash` (+ `pm` и `dojo`, если ставите 2btask/DefectDojo).
+`automation`, `dash` (+ `2btask` и `dojo`, если ставите 2btask/DefectDojo).
 Записи указывают на IP этого сервера **в сети NetBird**, не на публичный —
 см. [docs/vpn-netbird.md](docs/vpn-netbird.md), его нужно поставить и
 подключить этот сервер как peer до запуска `install.sh`.

@@ -29,7 +29,7 @@ authentication: **On** — иначе не будет вкладки Credentials
 | `gitlab` | `https://git.${BASE_DOMAIN}/users/auth/openid_connect/callback` | `https://git.${BASE_DOMAIN}` |
 | `grafana` | `https://grafana.${BASE_DOMAIN}/login/generic_oauth` | `https://grafana.${BASE_DOMAIN}` |
 | `n8n` | `https://automation.${BASE_DOMAIN}/auth/oidc/callback` | `https://automation.${BASE_DOMAIN}` |
-| `2btask` | `https://pm.${BASE_DOMAIN}/auth/callback` | `https://pm.${BASE_DOMAIN}` |
+| `2btask` | `https://2btask.${BASE_DOMAIN}/auth/callback` | `https://2btask.${BASE_DOMAIN}` |
 
 После сохранения каждого — вкладка **Credentials** → скопировать **Client
 Secret**.
