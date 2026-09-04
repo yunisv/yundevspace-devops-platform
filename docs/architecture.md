@@ -14,7 +14,7 @@ flowchart TB
         runner["GitLab Runner"]
     end
 
-    plane["Plane<br/>(issue tracking / PM)"]
+    plane["2btask<br/>(issue tracking / PM, свой сервис)"]
     dash["Homepage<br/>(стартовая страница, за oauth2-proxy)"]
 
     subgraph quality["Управление уязвимостями"]
@@ -139,12 +139,13 @@ Container Registry), отдельный Harbor для этого не нужен
 |---|---|---|---|
 | Минимум (core + GitLab) | 4 | 8-10 GB | 60 GB SSD |
 | Рекомендуемый (+ мониторинг + автоматизация) | 6-8 | 16 GB | 150 GB SSD |
-| + Plane (Postgres/Redis/RabbitMQ/MinIO + web/api/worker/live) | 10-12 | 22-24 GB | 150 GB SSD |
+| + 2btask (db/server/client — три лёгких контейнера) | 6-8 | 18 GB | 150 GB SSD |
 | + DefectDojo + Harbor поверх | 12-16 | 28-32 GB | 300+ GB SSD (registry растёт быстро) |
 
-Plane официально заявляет минимум 2 vCPU/4GB, но это без запаса под
-RabbitMQ/MinIO под реальной нагрузкой нескольких команд — закладывайте
-4 vCPU/6-8GB сверх основного стека.
+2btask заметно легче Plane (которого он заменил — тот тянул за собой
+Postgres/Redis/RabbitMQ/MinIO + web/api/worker/live, 10-12 vCPU/22-24GB
+сверх основного стека): своя Postgres и два лёгких приложения
+(FastAPI+nginx), без брокера очередей и объектного хранилища.
 
 GitLab CE официально не рекомендуется запускать менее чем на 8GB RAM даже
 для маленьких команд — при нехватке памяти чаще всего страдает Sidekiq и

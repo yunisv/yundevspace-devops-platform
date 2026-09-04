@@ -153,7 +153,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Роли и доступные кнопки. Заполнить реальными Telegram user ID (свой\n// и коллег): написать боту /bot один раз, свой ID увидеть в n8n\n// Executions (Extract Commands -> from.id), либо спросить у стороннего\n// бота вроде @userinfobot.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', planeUserId: '' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst LABELS = {\n  create_task: '📋 Создать задачу',\n  trigger_pipeline: '🚀 Поднять пайплайн',\n  show_dojo_report: '🛡 Отчёт DefectDojo',\n};\n\nconst user = USERS[$json.from.id];\nif (!user) return []; // неизвестный пользователь — молча игнорируем /bot\n\nconst actions = ROLE_ACTIONS[user.role] || [];\nconst keyboard = actions.map(a => ([{ text: LABELS[a], callback_data: 'action:' + a }]));\nreturn { json: {\n  chat_id: $json.chat.id,\n  text: `Привет, ${user.name}! Выбери действие:`,\n  keyboard\n} };"
+        "jsCode": "// Роли и доступные кнопки. Заполнить реальными Telegram user ID (свой\n// и коллег): написать боту /bot один раз, свой ID увидеть в n8n\n// Executions (Extract Commands -> from.id), либо спросить у стороннего\n// бота вроде @userinfobot.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', taskboardUserId: '' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst LABELS = {\n  create_task: '📋 Создать задачу',\n  trigger_pipeline: '🚀 Поднять пайплайн',\n  show_dojo_report: '🛡 Отчёт DefectDojo',\n};\n\nconst user = USERS[$json.from.id];\nif (!user) return []; // неизвестный пользователь — молча игнорируем /bot\n\nconst actions = ROLE_ACTIONS[user.role] || [];\nconst keyboard = actions.map(a => ([{ text: LABELS[a], callback_data: 'action:' + a }]));\nreturn { json: {\n  chat_id: $json.chat.id,\n  text: `Привет, ${user.name}! Выбери действие:`,\n  keyboard\n} };"
       },
       "id": "t4f-build-menu",
       "name": "Build Menu",
@@ -192,7 +192,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands.\n// Виды callback_data:\n//   action:X         — нажали пункт меню (идёт через Authorize & Route,\n//                       проверка прав)\n//   product:X:Y       — ответили на вопрос \"какой продукт\" для действия X\n//   severity:P:S       — выбрали категорию severity S в отчёте по продукту P\n//                       (drill-down внутри уже разрешённого show_dojo_report,\n//                       повторно права не проверяем)\n//   finding:ID        — выбрали конкретную находку из списка\n//   planeproj:IDX      — выбрали проект Plane (IDX — индекс в списке,\n//                       не сам ID — тот слишком длинный для callback_data)\n//   planeassignee:TGID — выбрали исполнителя (TGID — Telegram id из USERS)\n//   gitlabproj:IDX      — выбрали проект GitLab для trigger_pipeline (тот\n//                       же индексный трюк, что и с planeproj)\n//   gitlabprojpage:N    — навигация по страницам списка проектов GitLab\n//                       (тут просто номер страницы, не курсор как у Plane)\nconst cq = $('Extract Commands').item.json;\nconst data = cq.data || '';\nif (data.startsWith('product:')) {\n  const [, pendingAction, product] = data.split(':');\n  return { json: { kind: 'action', action: pendingAction, params: { product } } };\n}\nif (data.startsWith('severity:')) {\n  const [, product, severity] = data.split(':');\n  return { json: { kind: 'severity', product, severity } };\n}\nif (data.startsWith('finding:')) {\n  const [, findingId] = data.split(':');\n  return { json: { kind: 'finding', findingId } };\n}\nif (data.startsWith('planeprojpage:')) {\n  // Курсор Plane сам может содержать двоеточия (\"20:1:0\") — брать всё\n  // после префикса целиком, не через split(':').\n  return { json: { kind: 'plane_project_page', cursor: data.slice('planeprojpage:'.length) } };\n}\nif (data.startsWith('planeproj:')) {\n  return { json: { kind: 'plane_project_pick', idx: parseInt(data.split(':')[1], 10) } };\n}\nif (data.startsWith('planeassignee:')) {\n  return { json: { kind: 'plane_assignee_pick', tgId: data.split(':')[1] } };\n}\nif (data.startsWith('gitlabprojpage:')) {\n  return { json: { kind: 'gitlab_project_page', page: parseInt(data.slice('gitlabprojpage:'.length), 10) } };\n}\nif (data.startsWith('gitlabproj:')) {\n  return { json: { kind: 'gitlab_project_pick', idx: parseInt(data.split(':')[1], 10) } };\n}\nreturn { json: { kind: 'action', action: data.replace('action:', ''), params: {} } };"
+        "jsCode": "// $json тут — уже ответ answerCallbackQuery, не исходный callback_query\n// (та же ловушка, что была с Add Note -> Critical? в триаже DefectDojo) —\n// исходные данные берём явно из Extract Commands.\n// Виды callback_data:\n//   action:X         — нажали пункт меню (идёт через Authorize & Route,\n//                       проверка прав)\n//   product:X:Y       — ответили на вопрос \"какой продукт\" для действия X\n//   severity:P:S       — выбрали категорию severity S в отчёте по продукту P\n//                       (drill-down внутри уже разрешённого show_dojo_report,\n//                       повторно права не проверяем)\n//   finding:ID        — выбрали конкретную находку из списка\n//   taskproj:IDX       — выбрали проект 2btask (IDX — индекс в списке,\n//                       не сам ID — тот слишком длинный для callback_data)\n//   taskassignee:TGID  — выбрали исполнителя (TGID — Telegram id из USERS)\n//   gitlabproj:IDX      — выбрали проект GitLab для trigger_pipeline (тот\n//                       же индексный трюк, что и с taskproj)\n//   gitlabprojpage:N    — навигация по страницам списка проектов GitLab\n//                       (у /api/v1/projects 2btask пагинации нет вообще,\n//                       поэтому у task-веток аналога нет)\nconst cq = $('Extract Commands').item.json;\nconst data = cq.data || '';\nif (data.startsWith('product:')) {\n  const [, pendingAction, product] = data.split(':');\n  return { json: { kind: 'action', action: pendingAction, params: { product } } };\n}\nif (data.startsWith('severity:')) {\n  const [, product, severity] = data.split(':');\n  return { json: { kind: 'severity', product, severity } };\n}\nif (data.startsWith('finding:')) {\n  const [, findingId] = data.split(':');\n  return { json: { kind: 'finding', findingId } };\n}\nif (data.startsWith('taskproj:')) {\n  return { json: { kind: 'task_project_pick', idx: parseInt(data.split(':')[1], 10) } };\n}\nif (data.startsWith('taskassignee:')) {\n  return { json: { kind: 'task_assignee_pick', tgId: data.split(':')[1] } };\n}\nif (data.startsWith('gitlabprojpage:')) {\n  return { json: { kind: 'gitlab_project_page', page: parseInt(data.slice('gitlabprojpage:'.length), 10) } };\n}\nif (data.startsWith('gitlabproj:')) {\n  return { json: { kind: 'gitlab_project_pick', idx: parseInt(data.split(':')[1], 10) } };\n}\nreturn { json: { kind: 'action', action: data.replace('action:', ''), params: {} } };"
       },
       "id": "t4i-handle-button",
       "name": "Handle Button",
@@ -250,7 +250,7 @@
           "conditions": [
             {
               "leftValue": "={{ $json.kind }}",
-              "rightValue": "plane_project_pick",
+              "rightValue": "task_project_pick",
               "operator": { "type": "string", "operation": "equals" }
             }
           ]
@@ -258,7 +258,7 @@
         "options": {}
       },
       "id": "t4q-is-plane-project",
-      "name": "Is Plane Project Pick",
+      "name": "Is Task Project Pick",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [140, 540]
@@ -271,7 +271,7 @@
           "conditions": [
             {
               "leftValue": "={{ $json.kind }}",
-              "rightValue": "plane_assignee_pick",
+              "rightValue": "task_assignee_pick",
               "operator": { "type": "string", "operation": "equals" }
             }
           ]
@@ -279,7 +279,7 @@
         "options": {}
       },
       "id": "t4r-is-plane-assignee",
-      "name": "Is Plane Assignee Pick",
+      "name": "Is Task Assignee Pick",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [140, 660]
@@ -287,7 +287,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const orig = $('Extract Commands').item.json;\nconst userId = orig.from.id;\nconst chatId = orig.message.chat.id;\nconst staticData = $getWorkflowStaticData('global');\nconst pending = staticData.pendingTasks && staticData.pendingTasks[userId];\nif (!pending || !pending.projectChoices) {\n  return { json: { chat_id: chatId, text: 'Сессия создания задачи истекла — начни заново через /bot.' } };\n}\nconst project = pending.projectChoices[$json.idx];\nif (!project) {\n  return { json: { chat_id: chatId, text: 'Не удалось определить проект — начни заново через /bot.' } };\n}\npending.project = project;\n\n// Та же роспись людей, что и в Build Menu/Authorize & Route, плюс\n// planeUserId (member id в самом Plane, не Telegram id) — без него\n// исполнителя не назначить.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', planeUserId: '' },\n};\nconst keyboard = Object.entries(USERS).map(([tgId, u]) => ([{ text: u.name, callback_data: 'planeassignee:' + tgId }]));\nreturn { json: { chat_id: chatId, text: `Проект: ${project.name}\\nКому назначить?`, keyboard } };"
+        "jsCode": "const orig = $('Extract Commands').item.json;\nconst userId = orig.from.id;\nconst chatId = orig.message.chat.id;\nconst staticData = $getWorkflowStaticData('global');\nconst pending = staticData.pendingTasks && staticData.pendingTasks[userId];\nif (!pending || !pending.projectChoices) {\n  return { json: { chat_id: chatId, text: 'Сессия создания задачи истекла — начни заново через /bot.' } };\n}\nconst project = pending.projectChoices[$json.idx];\nif (!project) {\n  return { json: { chat_id: chatId, text: 'Не удалось определить проект — начни заново через /bot.' } };\n}\npending.project = project;\n\n// Та же роспись людей, что и в Build Menu/Authorize & Route, плюс\n// taskboardUserId (реальный id пользователя в 2btask, не Telegram id) —\n// без него исполнителя не назначить (assigneeId в POST /api/v1/tasks).\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', taskboardUserId: '' },\n};\nconst keyboard = Object.entries(USERS).map(([tgId, u]) => ([{ text: u.name, callback_data: 'taskassignee:' + tgId }]));\nreturn { json: { chat_id: chatId, text: `Проект: ${project.name}\\nКому назначить?`, keyboard } };"
       },
       "id": "t4s-handle-project-pick",
       "name": "Handle Project Pick",
@@ -298,7 +298,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const orig = $('Extract Commands').item.json;\nconst userId = orig.from.id;\nconst chatId = orig.message.chat.id;\nconst staticData = $getWorkflowStaticData('global');\nconst pending = staticData.pendingTasks && staticData.pendingTasks[userId];\nif (!pending || !pending.project) {\n  return { json: { chat_id: chatId, text: 'Сессия создания задачи истекла — начни заново через /bot.' } };\n}\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', planeUserId: '' },\n};\nconst assignee = USERS[$json.tgId];\nif (!assignee) {\n  return { json: { chat_id: chatId, text: 'Не удалось определить исполнителя — начни заново через /bot.' } };\n}\npending.assignee = assignee;\nstaticData.awaitingTitleFor = { userId, expiresAt: Date.now() + 300000 };\nreturn { json: { chat_id: chatId, text: `Исполнитель: ${assignee.name}\\nНапиши название задачи (голосом или текстом).` } };"
+        "jsCode": "const orig = $('Extract Commands').item.json;\nconst userId = orig.from.id;\nconst chatId = orig.message.chat.id;\nconst staticData = $getWorkflowStaticData('global');\nconst pending = staticData.pendingTasks && staticData.pendingTasks[userId];\nif (!pending || !pending.project) {\n  return { json: { chat_id: chatId, text: 'Сессия создания задачи истекла — начни заново через /bot.' } };\n}\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', taskboardUserId: '' },\n};\nconst assignee = USERS[$json.tgId];\nif (!assignee) {\n  return { json: { chat_id: chatId, text: 'Не удалось определить исполнителя — начни заново через /bot.' } };\n}\npending.assignee = assignee;\nstaticData.awaitingTitleFor = { userId, expiresAt: Date.now() + 300000 };\nreturn { json: { chat_id: chatId, text: `Исполнитель: ${assignee.name}\\nНапиши название задачи (голосом или текстом).` } };"
       },
       "id": "t4t-handle-assignee-pick",
       "name": "Handle Assignee Pick",
@@ -485,7 +485,7 @@
         "jsCode": "const text = JSON.parse($json.data || '{}').text || '';\nconst orig = $('Extract Commands').item.json;\nconst userId = orig.from.id;\nconst chatId = orig.chat.id;\nconst staticData = $getWorkflowStaticData('global');\nconst pending = staticData.pendingTasks && staticData.pendingTasks[userId];\nif (!pending || !pending.project || !pending.assignee) {\n  return { json: { ready: false, chat_id: chatId, text: 'Сессия создания задачи истекла — начни заново через /bot.' } };\n}\nconst title = text.trim();\nif (!title) {\n  return { json: { ready: false, chat_id: chatId, text: 'Не расслышал название — начни заново через /bot.' } };\n}\npending.title = title;\nreturn { json: { ready: true, chat_id: chatId, userId, project: pending.project, assignee: pending.assignee, title, attachments: pending.attachments || [] } };"
       },
       "id": "t22-finalize-task",
-      "name": "Finalize Plane Task",
+      "name": "Finalize Task",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [360, 480]
@@ -506,7 +506,7 @@
         "options": {}
       },
       "id": "t23-is-ready",
-      "name": "Plane Task Ready?",
+      "name": "Task Ready?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [580, 480]
@@ -514,16 +514,22 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://pm.devops.2be.az/api/v1/workspaces/2be/projects/{{ $json.project.id }}/work-items/",
+        "url": "https://2btask.devops.2be.az/api/v1/tasks",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: $json.title, assignees: [$json.assignee.planeUserId] }) }}",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, projectId: $json.project.id, assigneeId: $json.assignee.taskboardUserId, externalRef: 'telegram:' + $json.userId }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Idempotency-Key", "value": "={{ 'tg-task-' + $json.userId + '-' + Date.now() }}" }
+          ]
+        },
         "options": {}
       },
       "id": "t24-create-plane-task",
-      "name": "Create Plane Task",
+      "name": "Create 2btask Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "onError": "continueRegularOutput",
@@ -531,7 +537,7 @@
       "credentials": {
         "httpHeaderAuth": {
           "id": "",
-          "name": "Plane API"
+          "name": "2btask API"
         }
       }
     },
@@ -542,7 +548,7 @@
           "combinator": "and",
           "conditions": [
             {
-              "leftValue": "={{ ($('Finalize Plane Task').item.json.attachments || []).length > 0 }}",
+              "leftValue": "={{ ($('Finalize Task').item.json.attachments || []).length > 0 }}",
               "rightValue": true,
               "operator": { "type": "boolean", "operation": "true" }
             }
@@ -559,10 +565,10 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Весь трёхшаговый presigned-upload Plane для каждого вложения — в\n// одной ноде, циклом, включая скачивание файла из Telegram (напрямую\n// через this.helpers.httpRequest — без отдельных HTTP-нод, чтобы не\n// таскать бинарник между нодами между итерациями цикла). Код-нода не\n// умеет использовать n8n credential напрямую, только явное значение,\n// поэтому оба токена захардкожены (тот же паттерн, что и с токеном\n// Telegram-бота в остальном workflow — не новый прецедент).\n// ЗАПОЛНИТЬ PLANE_TOKEN тем же токеном, что в credential \"Plane API\".\nconst PLANE_TOKEN = '';\nconst BOT_TOKEN = '<REDACTED-BOT-TOKEN>';\nconst ctx = $('Finalize Plane Task').item.json;\nconst created = $('Create Plane Task').item.json;\nconst base = 'https://pm.devops.2be.az/api/v1/workspaces/2be';\n\nlet uploaded = 0;\nlet failed = 0;\n\nfor (const att of (ctx.attachments || [])) {\n  try {\n    const fileInfo = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${att.fileId}`,\n      json: true,\n    });\n    const filePath = fileInfo.result.file_path;\n    const raw = await this.helpers.httpRequest({\n      method: 'GET',\n      url: `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`,\n      encoding: 'arraybuffer',\n    });\n    const buffer = Buffer.from(raw);\n\n    const cred = await this.helpers.httpRequest({\n      method: 'POST',\n      url: `${base}/projects/${ctx.project.id}/work-items/${created.id}/attachments/`,\n      headers: { 'X-API-Key': PLANE_TOKEN, 'Content-Type': 'application/json' },\n      body: { name: att.fileName, type: att.mimeType, size: buffer.length },\n      json: true,\n    });\n\n    const boundary = '----n8n' + Date.now() + Math.random().toString(16).slice(2);\n    const parts = [];\n    for (const [key, value] of Object.entries(cred.upload_data.fields)) {\n      parts.push(Buffer.from(`--${boundary}\\r\\nContent-Disposition: form-data; name=\"${key}\"\\r\\n\\r\\n${value}\\r\\n`));\n    }\n    parts.push(Buffer.from(`--${boundary}\\r\\nContent-Disposition: form-data; name=\"file\"; filename=\"${att.fileName}\"\\r\\nContent-Type: ${att.mimeType}\\r\\n\\r\\n`));\n    parts.push(buffer);\n    parts.push(Buffer.from(`\\r\\n--${boundary}--\\r\\n`));\n    const body = Buffer.concat(parts);\n\n    await this.helpers.httpRequest({\n      method: 'POST',\n      url: cred.upload_data.url,\n      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },\n      body,\n    });\n\n    await this.helpers.httpRequest({\n      method: 'PATCH',\n      url: `${base}/projects/${ctx.project.id}/work-items/${created.id}/attachments/${cred.asset_id}/`,\n      headers: { 'X-API-Key': PLANE_TOKEN },\n    });\n\n    uploaded++;\n  } catch (e) {\n    failed++;\n  }\n}\n\nreturn { json: { uploaded, failed, total: (ctx.attachments || []).length } };"
+        "jsCode": "// В 2btask /api/v1 нет ручки для вложений (см. server/INTEGRATION.md в\n// репозитории 2btask — там только tasks/time-logs/справочники) в\n// отличие от Plane, у которого был трёхшаговый presigned-upload. Не\n// придумываем несуществующий эндпоинт — просто честно считаем и\n// предупреждаем в чате (Report Task Created), что вложения нужно\n// добавить вручную по ссылке на задачу.\nconst ctx = $('Finalize Task').item.json;\nreturn { json: { uploaded: 0, failed: 0, skipped: (ctx.attachments || []).length } };"
       },
       "id": "t32-upload-attachment",
-      "name": "Upload Attachments to Plane",
+      "name": "Note Skipped Attachments",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "onError": "continueRegularOutput",
@@ -571,7 +577,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const ctx = $('Finalize Plane Task').item.json;\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.pendingTasks) delete staticData.pendingTasks[ctx.userId];\nconst created = $('Create Plane Task').item.json;\nconst attachmentLine = (ctx.attachments && ctx.attachments.length)\n  ? `\\n📎 Вложения: ${$json.uploaded || 0} загружено${$json.failed ? `, ${$json.failed} не удалось` : ''}`\n  : '';\nconst text = created && created.id\n  ? `✅ Задача создана: ${ctx.title}\\nПроект: ${ctx.project.name}\\nИсполнитель: ${ctx.assignee.name}${attachmentLine}\\nhttps://pm.devops.2be.az/2be/projects/${ctx.project.id}/issues/${created.id}`\n  : '⚠️ Не удалось создать задачу в Plane — проверь credential/права и попробуй ещё раз через /bot.';\nreturn { json: { chat_id: ctx.chat_id, text } };"
+        "jsCode": "const ctx = $('Finalize Task').item.json;\nconst staticData = $getWorkflowStaticData('global');\nif (staticData.pendingTasks) delete staticData.pendingTasks[ctx.userId];\nconst created = $('Create 2btask Task').item.json;\nconst attachmentLine = (ctx.attachments && ctx.attachments.length)\n  ? `\\n📎 ${$json.skipped || ctx.attachments.length} вложени${(ctx.attachments.length === 1) ? 'е' : 'я'} не отправлен${(ctx.attachments.length === 1) ? 'о' : 'ы'} — в 2btask API v1 нет ручки для вложений, добавь вручную по ссылке ниже`\n  : '';\nconst text = created && created.id\n  ? `✅ Задача создана: ${ctx.title}\\nПроект: ${ctx.project.name}\\nИсполнитель: ${ctx.assignee.name}${attachmentLine}\\nhttps://2btask.devops.2be.az/tasks/${created.id}`\n  : '⚠️ Не удалось создать задачу в 2btask — проверь credential/права и попробуй ещё раз через /bot.';\nreturn { json: { chat_id: ctx.chat_id, text } };"
       },
       "id": "t25-report-task-created",
       "name": "Report Task Created",
@@ -582,7 +588,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const text = JSON.parse($json.data || '{}').text || '';\nconst prompt = `Ты — ассистент команды разработки, разбираешь голосовые/текстовые команды в рабочем чате и определяешь, что нужно сделать.\n\nДоступные действия:\n- create_task: создать задачу в трекере (Plane). params: {title, description}\n- trigger_pipeline: запустить CI/CD пайплайн. params: {project (имя, если названо, иначе null), branch (если названа, иначе \"main\")}\n- show_dojo_report: показать отчёт по находкам безопасности из DefectDojo. params: {product (имя, если названо, иначе null)}\n- unknown: если непонятно, что имелось в виду\n\nТекст команды: \"${text}\"\n\nОтветь ТОЛЬКО JSON, без другого текста, без markdown:\n{\"action\": \"create_task|trigger_pipeline|show_dojo_report|unknown\", \"params\": {}, \"reply_text\": \"короткое подтверждение на русском того, что ты понял, или уточняющий вопрос если unknown\"}`;\nreturn { json: { prompt, original_text: text } };"
+        "jsCode": "const text = JSON.parse($json.data || '{}').text || '';\nconst prompt = `Ты — ассистент команды разработки, разбираешь голосовые/текстовые команды в рабочем чате и определяешь, что нужно сделать.\n\nДоступные действия:\n- create_task: создать задачу в трекере (2btask). params: {title, description}\n- trigger_pipeline: запустить CI/CD пайплайн. params: {project (имя, если названо, иначе null), branch (если названа, иначе \"main\")}\n- show_dojo_report: показать отчёт по находкам безопасности из DefectDojo. params: {product (имя, если названо, иначе null)}\n- unknown: если непонятно, что имелось в виду\n\nТекст команды: \"${text}\"\n\nОтветь ТОЛЬКО JSON, без другого текста, без markdown:\n{\"action\": \"create_task|trigger_pipeline|show_dojo_report|unknown\", \"params\": {}, \"reply_text\": \"короткое подтверждение на русском того, что ты понял, или уточняющий вопрос если unknown\"}`;\nreturn { json: { prompt, original_text: text } };"
       },
       "id": "t10-build-router-prompt",
       "name": "Build Router Prompt",
@@ -593,12 +599,14 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://ollama:11434/api/chat",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"qwen2.5:14b-instruct-q4_K_M\", messages: [{ role: \"user\", content: $json.prompt }], stream: false, format: \"json\" }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"deepseek-chat\", messages: [{ role: \"user\", content: $json.prompt }], stream: false, response_format: { type: \"json_object\" } }) }}",
         "options": {
-          "timeout": 600000
+          "timeout": 60000
         }
       },
       "id": "t11-call-router-llm",
@@ -606,12 +614,18 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "onError": "continueRegularOutput",
-      "position": [360, 300]
+      "position": [360, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "DeepSeek API"
+        }
+      }
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "let route;\ntry {\n  route = JSON.parse($json.message.content);\n  if (!route.action) throw new Error('no action');\n  if (!route.params) route.params = {};\n} catch (e) {\n  route = { action: 'unknown', params: {}, reply_text: 'Не понял команду, попробуй сформулировать иначе.' };\n}\nreturn { json: route };"
+        "jsCode": "let route;\ntry {\n  route = JSON.parse($json.choices[0].message.content);\n  if (!route.action) throw new Error('no action');\n  if (!route.params) route.params = {};\n} catch (e) {\n  route = { action: 'unknown', params: {}, reply_text: 'Не понял команду, попробуй сформулировать иначе.' };\n}\nreturn { json: route };"
       },
       "id": "t12-parse-route",
       "name": "Parse Route",
@@ -622,7 +636,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Общая точка для обоих входов (голос/текст через Parse Route, кнопки\n// через Handle Button) — единая проверка прав по роли, дальше единый\n// роутинг по action. chat_id берём из исходного апдейта (Extract\n// Commands), а не из $json — он тут уже результат Parse Route/Handle\n// Button, там chat нет.\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.chat ? orig.chat.id : orig.message.chat.id;\nconst userId = orig.from.id;\n\n// Третья копия USERS/ROLE_ACTIONS (см. Build Menu, Handle Button) —\n// синхронизировать руками при добавлении людей.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', planeUserId: '' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst NOT_YET_IMPLEMENTED = {};\n// Продукты в DefectDojo — добавлять сюда по мере появления новых.\nconst PRODUCTS = ['usta_tap'];\n\nconst user = USERS[userId];\nconst action = $json.action;\nconst allowed = user && (ROLE_ACTIONS[user.role] || []).includes(action);\n\nif (!allowed) {\n  return { json: { route: 'denied', chat_id: chatId, text: '⛔ Нет доступа к этому действию.' } };\n}\nif (action === 'show_dojo_report') {\n  const requested = ($json.params && $json.params.product) || null;\n  if (PRODUCTS.length === 1) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: PRODUCTS[0] } };\n  }\n  if (requested && PRODUCTS.includes(requested)) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: requested } };\n  }\n  // Несколько продуктов, и не ясно (или неверно понято), какой именно —\n  // спрашиваем кнопками. callback_data: product:<action>:<product>,\n  // разбирается в Handle Button.\n  const keyboard = PRODUCTS.map(p => ([{ text: p, callback_data: 'product:' + action + ':' + p }]));\n  return { json: { route: 'ask_product', chat_id: chatId, keyboard } };\n}\nif (action === 'create_task') {\n  const staticData = $getWorkflowStaticData('global');\n  staticData.pendingTasks = staticData.pendingTasks || {};\n  staticData.pendingTasks[userId] = { title: null, project: null, assignee: null };\n  return { json: { route: 'create_task_pick_project', chat_id: chatId } };\n}\nif (action === 'trigger_pipeline') {\n  const staticData = $getWorkflowStaticData('global');\n  staticData.pendingPipelines = staticData.pendingPipelines || {};\n  staticData.pendingPipelines[userId] = { project: null };\n  return { json: { route: 'trigger_pipeline_pick_project', chat_id: chatId, page: 1 } };\n}\nif (NOT_YET_IMPLEMENTED[action]) {\n  return { json: { route: action, chat_id: chatId, text: NOT_YET_IMPLEMENTED[action] } };\n}\nreturn { json: { route: 'unknown', chat_id: chatId, text: '🤖 ' + ($json.reply_text || 'Не понял команду.') } };"
+        "jsCode": "// Общая точка для обоих входов (голос/текст через Parse Route, кнопки\n// через Handle Button) — единая проверка прав по роли, дальше единый\n// роутинг по action. chat_id берём из исходного апдейта (Extract\n// Commands), а не из $json — он тут уже результат Parse Route/Handle\n// Button, там chat нет.\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.chat ? orig.chat.id : orig.message.chat.id;\nconst userId = orig.from.id;\n\n// Третья копия USERS/ROLE_ACTIONS (см. Build Menu, Handle Button) —\n// синхронизировать руками при добавлении людей.\nconst USERS = {\n  // 123456789: { name: 'Юнис', role: 'admin', taskboardUserId: '' },\n};\nconst ROLE_ACTIONS = {\n  admin:  ['create_task', 'trigger_pipeline', 'show_dojo_report'],\n  pm:     ['create_task', 'show_dojo_report'],\n  worker: ['show_dojo_report'],\n};\nconst NOT_YET_IMPLEMENTED = {};\n// Продукты в DefectDojo — добавлять сюда по мере появления новых.\nconst PRODUCTS = ['usta_tap'];\n\nconst user = USERS[userId];\nconst action = $json.action;\nconst allowed = user && (ROLE_ACTIONS[user.role] || []).includes(action);\n\nif (!allowed) {\n  return { json: { route: 'denied', chat_id: chatId, text: '⛔ Нет доступа к этому действию.' } };\n}\nif (action === 'show_dojo_report') {\n  const requested = ($json.params && $json.params.product) || null;\n  if (PRODUCTS.length === 1) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: PRODUCTS[0] } };\n  }\n  if (requested && PRODUCTS.includes(requested)) {\n    return { json: { route: 'show_dojo_report', chat_id: chatId, product: requested } };\n  }\n  // Несколько продуктов, и не ясно (или неверно понято), какой именно —\n  // спрашиваем кнопками. callback_data: product:<action>:<product>,\n  // разбирается в Handle Button.\n  const keyboard = PRODUCTS.map(p => ([{ text: p, callback_data: 'product:' + action + ':' + p }]));\n  return { json: { route: 'ask_product', chat_id: chatId, keyboard } };\n}\nif (action === 'create_task') {\n  const staticData = $getWorkflowStaticData('global');\n  staticData.pendingTasks = staticData.pendingTasks || {};\n  staticData.pendingTasks[userId] = { title: null, project: null, assignee: null };\n  return { json: { route: 'create_task_pick_project', chat_id: chatId } };\n}\nif (action === 'trigger_pipeline') {\n  const staticData = $getWorkflowStaticData('global');\n  staticData.pendingPipelines = staticData.pendingPipelines || {};\n  staticData.pendingPipelines[userId] = { project: null };\n  return { json: { route: 'trigger_pipeline_pick_project', chat_id: chatId, page: 1 } };\n}\nif (NOT_YET_IMPLEMENTED[action]) {\n  return { json: { route: action, chat_id: chatId, text: NOT_YET_IMPLEMENTED[action] } };\n}\nreturn { json: { route: 'unknown', chat_id: chatId, text: '🤖 ' + ($json.reply_text || 'Не понял команду.') } };"
       },
       "id": "t13-authorize-route",
       "name": "Authorize & Route",
@@ -722,7 +736,7 @@
           "conditions": [
             {
               "leftValue": "={{ $json.kind }}",
-              "rightValue": "plane_project_page",
+              "rightValue": "task_project_page",
               "operator": { "type": "string", "operation": "equals" }
             }
           ]
@@ -730,7 +744,7 @@
         "options": {}
       },
       "id": "t26-is-project-page",
-      "name": "Is Plane Project Page",
+      "name": "Is Task Project Page",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [140, 780]
@@ -876,13 +890,13 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://pm.devops.2be.az/api/v1/workspaces/2be/projects/?per_page=8{{ $json.cursor ? ('&cursor=' + $json.cursor) : '' }}",
+        "url": "https://2btask.devops.2be.az/api/v1/projects",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
       "id": "t19-list-plane-projects",
-      "name": "List Plane Projects",
+      "name": "List 2btask Projects",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "onError": "continueRegularOutput",
@@ -890,14 +904,14 @@
       "credentials": {
         "httpHeaderAuth": {
           "id": "",
-          "name": "Plane API"
+          "name": "2btask API"
         }
       }
     },
     {
       "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "// chat_id/userId — единообразно из Extract Commands, а не из\n// Authorize & Route: сюда попадают и первый заход (через Authorize &\n// Route), и клики \"Дальше/Назад\" (через Is Plane Project Page,\n// Authorize & Route в этой ветке не участвует).\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.message ? orig.message.chat.id : orig.chat.id;\nconst userId = orig.from.id;\nconst staticData = $getWorkflowStaticData('global');\nconst results = $json.results || [];\nconst projects = results.map(p => ({ id: p.id, name: p.name }));\nif (projects.length === 0) {\n  return { json: { chat_id: chatId, text: 'В Plane нет ни одного проекта — сначала создай проект в самом Plane.' } };\n}\nstaticData.pendingTasks[userId].projectChoices = projects;\nconst keyboard = projects.map((p, i) => ([{ text: p.name, callback_data: 'planeproj:' + i }]));\nconst navRow = [];\nif ($json.prev_page_results && $json.prev_cursor) {\n  navRow.push({ text: '◀️ Назад', callback_data: 'planeprojpage:' + $json.prev_cursor });\n}\nif ($json.next_page_results && $json.next_cursor) {\n  navRow.push({ text: 'Дальше ▶️', callback_data: 'planeprojpage:' + $json.next_cursor });\n}\nif (navRow.length > 0) keyboard.push(navRow);\nconst pageInfo = $json.total_pages ? ` (стр. из ${$json.total_pages})` : '';\nreturn { json: { chat_id: chatId, text: 'Выбери проект' + pageInfo + ':', keyboard } };"
+        "mode": "runOnceForAllItems",
+        "jsCode": "// /api/v1/projects отдаёт голый JSON-массив, без пагинации (в отличие\n// от Plane, у которого была курсорная) — n8n сам разбивает ответ на\n// отдельные item'ы, поэтому тут N item'ов, по одному проекту в каждом\n// (тот же приём, что и в Build GitLab Project Picker).\nconst orig = $('Extract Commands').item.json;\nconst chatId = orig.message ? orig.message.chat.id : orig.chat.id;\nconst userId = orig.from.id;\nconst staticData = $getWorkflowStaticData('global');\nconst items = $input.all();\nconst projects = items.filter(i => i.json && i.json.id).map(i => ({ id: i.json.id, name: i.json.name }));\nif (projects.length === 0) {\n  return { json: { chat_id: chatId, text: 'В 2btask нет ни одного проекта — сначала создай проект в самом 2btask.' } };\n}\nstaticData.pendingTasks[userId].projectChoices = projects;\nconst keyboard = projects.map((p, i) => ([{ text: p.name, callback_data: 'taskproj:' + i }]));\nreturn { json: { chat_id: chatId, text: 'Выбери проект:', keyboard } };"
       },
       "id": "t20-build-project-picker",
       "name": "Build Project Picker",
@@ -1044,24 +1058,24 @@
     "Is Finding Detail": {
       "main": [
         [{ "node": "Get Finding Detail", "type": "main", "index": 0 }],
-        [{ "node": "Is Plane Project Pick", "type": "main", "index": 0 }]
+        [{ "node": "Is Task Project Pick", "type": "main", "index": 0 }]
       ]
     },
-    "Is Plane Project Pick": {
+    "Is Task Project Pick": {
       "main": [
         [{ "node": "Handle Project Pick", "type": "main", "index": 0 }],
-        [{ "node": "Is Plane Assignee Pick", "type": "main", "index": 0 }]
+        [{ "node": "Is Task Assignee Pick", "type": "main", "index": 0 }]
       ]
     },
-    "Is Plane Assignee Pick": {
+    "Is Task Assignee Pick": {
       "main": [
         [{ "node": "Handle Assignee Pick", "type": "main", "index": 0 }],
-        [{ "node": "Is Plane Project Page", "type": "main", "index": 0 }]
+        [{ "node": "Is Task Project Page", "type": "main", "index": 0 }]
       ]
     },
-    "Is Plane Project Page": {
+    "Is Task Project Page": {
       "main": [
-        [{ "node": "List Plane Projects", "type": "main", "index": 0 }],
+        [{ "node": "List 2btask Projects", "type": "main", "index": 0 }],
         [{ "node": "Is GitLab Project Pick", "type": "main", "index": 0 }]
       ]
     },
@@ -1136,29 +1150,29 @@
     },
     "Is Task Title": {
       "main": [
-        [{ "node": "Finalize Plane Task", "type": "main", "index": 0 }],
+        [{ "node": "Finalize Task", "type": "main", "index": 0 }],
         [{ "node": "Build Router Prompt", "type": "main", "index": 0 }]
       ]
     },
-    "Finalize Plane Task": {
-      "main": [[{ "node": "Plane Task Ready?", "type": "main", "index": 0 }]]
+    "Finalize Task": {
+      "main": [[{ "node": "Task Ready?", "type": "main", "index": 0 }]]
     },
-    "Plane Task Ready?": {
+    "Task Ready?": {
       "main": [
-        [{ "node": "Create Plane Task", "type": "main", "index": 0 }],
+        [{ "node": "Create 2btask Task", "type": "main", "index": 0 }],
         [{ "node": "Send Reply", "type": "main", "index": 0 }]
       ]
     },
-    "Create Plane Task": {
+    "Create 2btask Task": {
       "main": [[{ "node": "Has Attachment?", "type": "main", "index": 0 }]]
     },
     "Has Attachment?": {
       "main": [
-        [{ "node": "Upload Attachments to Plane", "type": "main", "index": 0 }],
+        [{ "node": "Note Skipped Attachments", "type": "main", "index": 0 }],
         [{ "node": "Report Task Created", "type": "main", "index": 0 }]
       ]
     },
-    "Upload Attachments to Plane": {
+    "Note Skipped Attachments": {
       "main": [[{ "node": "Report Task Created", "type": "main", "index": 0 }]]
     },
     "Report Task Created": {
@@ -1190,7 +1204,7 @@
     },
     "Route: Create Task?": {
       "main": [
-        [{ "node": "List Plane Projects", "type": "main", "index": 0 }],
+        [{ "node": "List 2btask Projects", "type": "main", "index": 0 }],
         [{ "node": "Route: Trigger Pipeline?", "type": "main", "index": 0 }]
       ]
     },
@@ -1200,7 +1214,7 @@
         [{ "node": "Send Reply", "type": "main", "index": 0 }]
       ]
     },
-    "List Plane Projects": {
+    "List 2btask Projects": {
       "main": [[{ "node": "Build Project Picker", "type": "main", "index": 0 }]]
     },
     "Build Project Picker": {

@@ -173,5 +173,5 @@ ufw disable
 
 Раз `automation.` (n8n) доступен только через NetBird, вебхуки от внешних
 SaaS (github.com и т.п.) до него не дойдут. Внутри платформы — GitLab,
-Plane, DefectDojo, Alertmanager — всё работает, они и так шлют вебхуки
+2btask, DefectDojo, Alertmanager — всё работает, они и так шлют вебхуки
 внутри той же сети NetBird.

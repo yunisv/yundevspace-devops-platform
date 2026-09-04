@@ -70,25 +70,33 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://ollama:11434/api/chat",
+        "url": "https://api.deepseek.com/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"qwen2.5:14b-instruct-q4_K_M\", messages: [{ role: \"user\", content: $json.prompt }], stream: false, format: \"json\" }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"deepseek-chat\", messages: [{ role: \"user\", content: $json.prompt }], stream: false, response_format: { type: \"json_object\" } }) }}",
         "options": {
-          "timeout": 600000
+          "timeout": 60000
         }
       },
       "id": "n6-ollama",
-      "name": "Call Ollama",
+      "name": "Call DeepSeek",
       "onError": "continueRegularOutput",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-100, 300]
+      "position": [-100, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "DeepSeek API"
+        }
+      }
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const finding = $('Build Prompt').item.json;\nlet verdict;\ntry {\n  verdict = JSON.parse($json.message.content);\n  if (!verdict.severity || !verdict.reasoning) throw new Error('missing fields');\n  if (!verdict.mitigation) verdict.mitigation = 'LLM не предложила конкретное исправление — нужна ручная проверка.';\n} catch (e) {\n  verdict = {\n    severity: finding.severity,\n    reasoning: 'Не удалось разобрать ответ LLM как JSON — нужна ручная проверка. Сырой ответ: ' + JSON.stringify($json).slice(0, 300),\n    create_issue: false,\n    mitigation: 'Не удалось получить рекомендацию от LLM — нужна ручная проверка.'\n  };\n}\nreturn { json: { ...finding, verdict } };"
+        "jsCode": "const finding = $('Build Prompt').item.json;\nlet verdict;\ntry {\n  verdict = JSON.parse($json.choices[0].message.content);\n  if (!verdict.severity || !verdict.reasoning) throw new Error('missing fields');\n  if (!verdict.mitigation) verdict.mitigation = 'LLM не предложила конкретное исправление — нужна ручная проверка.';\n} catch (e) {\n  verdict = {\n    severity: finding.severity,\n    reasoning: 'Не удалось разобрать ответ LLM как JSON — нужна ручная проверка. Сырой ответ: ' + JSON.stringify($json).slice(0, 300),\n    create_issue: false,\n    mitigation: 'Не удалось получить рекомендацию от LLM — нужна ручная проверка.'\n  };\n}\nreturn { json: { ...finding, verdict } };"
       },
       "id": "n7-parse-verdict",
       "name": "Parse Verdict",
@@ -228,9 +236,9 @@
       "main": [[{ "node": "Build Prompt", "type": "main", "index": 0 }]]
     },
     "Build Prompt": {
-      "main": [[{ "node": "Call Ollama", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Call DeepSeek", "type": "main", "index": 0 }]]
     },
-    "Call Ollama": {
+    "Call DeepSeek": {
       "main": [[{ "node": "Parse Verdict", "type": "main", "index": 0 }]]
     },
     "Parse Verdict": {

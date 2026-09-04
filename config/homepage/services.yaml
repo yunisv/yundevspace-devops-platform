@@ -2,15 +2,13 @@
 # docker labels (see config/homepage/docker.yaml) — nothing to add here.
 #
 # This file is for the add-ons installed by their own official installers
-# (Plane, DefectDojo, Harbor), which we don't control the labels of.
+# (DefectDojo, Harbor), which we don't control the labels of. 2btask
+# (docs/adding-2btask.md) isn't one of these — it gets homepage.* labels
+# from its own docker-compose.override.yml at deploy time, same
+# auto-discovery as everything else, no manual entry needed.
 # Uncomment the ones you've actually installed.
 
 # - Development:
-#     - Plane:
-#         href: https://pm.{{HOMEPAGE_VAR_BASE_DOMAIN}}
-#         description: Задачи, спринты, roadmap
-#         icon: plane.png
-#
 #     - DefectDojo:
 #         href: https://dojo.{{HOMEPAGE_VAR_BASE_DOMAIN}}
 #         description: Находки SAST/DAST/SCA

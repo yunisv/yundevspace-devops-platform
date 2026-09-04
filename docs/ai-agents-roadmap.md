@@ -18,19 +18,24 @@ SAST/Trivy/DefectDojo) и добавляет суждение поверх ни�
    тэги в DefectDojo через API, при critical — создаёт issue в GitLab.
    **Реализовано и проверено вживую на продакшн-сервере** —
    `docs/ai-agent-defectdojo-triage.md`,
-   `config/n8n/workflows/defectdojo-triage.json`. LLM — локальная, через
-   Ollama (`docs/local-llm.md`), не сторонний API.
+   `config/n8n/workflows/defectdojo-triage.json`. LLM — DeepSeek API
+   (`api.deepseek.com`), не локальная модель: раньше была самохостнутая
+   Ollama, но её сняли ради простоты (одна SaaS-зависимость вместо
+   ресурсоёмкого локального инференса — для этого конкретного роадмапа
+   утечка текста находок наружу сочли приемлемой).
 3. **Gate пайплайна** — job в `.gitlab-ci.yml` отправляет summary (тесты,
    coverage, SAST quality gate, найденные CVE) в n8n → LLM возвращает
    pass/fail/needs-human-review → пайплайн опрашивает n8n (webhook-response
    node) и либо продолжает деплой, либо блокирует его (manual job/exit code).
 4. **Постмортемы алертов** — Alertmanager → n8n → LLM собирает логи из
    Loki за инцидент и черновик post-mortem в GitLab wiki/issue.
-5. **Автоприоритизация задач** — Plane webhook (задача создана/обновлена)
+5. **Автоприоритизация задач** — 2btask вебхук (`task.created`/
+   `task.updated`, см. `server/INTEGRATION.md` в репозитории `yunisv/2btask`)
    → n8n → LLM оценивает приоритет/сложность по описанию и связанным MR
-   → проставляет priority/label в Plane через его REST API. Именно ради
-   этого шага и выбирали Plane, а не OpenProject — вебхуки на каждое
-   событие и типизированный SDK доступны в бесплатной Community-версии.
+   → `PATCH /api/v1/tasks/{id}` проставляет priority в 2btask. Раньше этот
+   пункт планировался под Plane (вебхуки на каждое событие в бесплатной
+   Community-версии); после замены Plane на свой сервис (`docs/adding-2btask.md`)
+   он ложится на собственный `/api/v1` — тот же принцип, свой контракт.
 
 ## Почему n8n, а не отдельный сервис агентов (пока)
 

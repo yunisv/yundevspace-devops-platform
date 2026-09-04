@@ -89,7 +89,7 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 # --- 4. sysctl (нужно для будущих OpenSearch/Elasticsearch-компонентов, --
-#        например если позже подключите Plane с полнотекстовым поиском) ---
+#        если такой понадобится добавить в стек) ---
 log "Настройка vm.max_map_count"
 current_map_count="$(sysctl -n vm.max_map_count)"
 if [ "$current_map_count" -lt 262144 ]; then

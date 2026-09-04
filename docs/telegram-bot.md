@@ -3,12 +3,12 @@
 Следующий AI-агент сверх `docs/ai-agents-roadmap.md`: упоминаешь бота
 `Alerts_TG` в рабочем чате, прикрепляешь голосовое (+ опционально фото/
 документы) — бот транскрибирует голос, распознаёт намерение через
-локальную LLM и выполняет одно из действий: создать задачу в Plane,
+DeepSeek и выполняет одно из действий: создать задачу в 2btask,
 поднять пайплайн в GitLab, показать отчёт из DefectDojo.
 
 Собирается поэтапно, с проверкой каждого шага на реальном сервере —
-слишком много новых интеграций сразу (Telegram inbound, Whisper, Plane
-API), чтобы делать это одним workflow вслепую.
+слишком много новых интеграций сразу (Telegram inbound, Whisper, API
+2btask), чтобы делать это одним workflow вслепую.
 
 ## Архитектура
 
@@ -16,9 +16,9 @@ API), чтобы делать это одним workflow вслепую.
 Telegram (voice/photo/document, упоминание бота в рабочем чате)
   → n8n сам стучится к Telegram API раз в 30 сек (long polling, НЕ webhook)
   → скачать voice.ogg → Whisper (локально, docker-compose.whisper.yml) → текст
-  → Ollama: классифицировать намерение → JSON {action, params, reply_text}
+  → DeepSeek: классифицировать намерение → JSON {action, params, reply_text}
   → Switch по action:
-       - create_task      → Plane API (+ прикреплённые файлы)
+       - create_task      → 2btask API v1 (без вложений — см. Этап 6)
        - trigger_pipeline → GitLab API (POST .../pipeline)
        - show_dojo_report → DefectDojo API → отформатировать → отправить в чат
        - unknown          → переспросить в чат
@@ -66,7 +66,7 @@ Telegram.** У бота в этом чате права админа — в та
 Вместо этого — **самозацикленный** long polling: воркфлоу триггерится
 внутренним Webhook-ом (`Poll Tick`, никуда не торчит наружу — дёргает
 себя сам n8n по внутреннему DNS-имени `http://n8n:5678/webhook/
-telegram-poll`, тот же приём, что и обращения к Ollama/Whisper по имени
+telegram-poll`, тот же приём, что и обращение к Whisper по имени
 контейнера). Сразу после каждого `getUpdates` (блокирующий вызов,
 `timeout=25` — либо возвращается сразу при новом сообщении, либо через
 25 сек пустым) нода **Continue Polling** дёргает тот же webhook снова —
@@ -88,42 +88,40 @@ telegram-poll`, тот же приём, что и обращения к Ollama/W
 
 **Голос остаётся на сервере**: транскрипция через локальный Whisper
 (`faster-whisper`, модель `small`, язык `ru` по умолчанию), не через
-внешний STT API — тот же принцип, что и с LLM в `docs/local-llm.md`.
+внешний STT API. Классификация намерения (в отличие от транскрипции) —
+через DeepSeek, SaaS: короткий текст команды сочли приемлемым отдавать
+наружу, в отличие от аудио или содержимого находок/диффов.
 
-## Ресурсы: Ollama + Whisper на одном сервере
+## Ресурсы: Whisper
 
-Whisper — ещё один CPU-тяжёлый сервис на том же хосте, где уже 12 из 16
-ядер отданы Ollama. Голосовая команда теоретически может прилететь, пока
-идёт триаж находки DefectDojo (`docs/ai-agent-defectdojo-triage.md`) —
-оба сервиса не должны иметь возможность вместе съесть всё до последнего
-ядра, иначе просядут GitLab/DefectDojo.
+Whisper — единственный CPU-тяжёлый AI-сервис на хосте теперь (роутер
+намерений — DeepSeek, внешний API, локальный CPU/RAM не расходует;
+раньше тут же крутилась Ollama, снята 2026-09-04). Голосовая команда
+теоретически может прилететь, пока идёт триаж находки DefectDojo
+(`docs/ai-agent-defectdojo-triage.md`, теперь тоже на DeepSeek) — с
+Whisper они больше не делят одно и то же CPU-время на одном сервисе.
 
-**Изменить в `.env` на сервере**:
+**`.env` на сервере**:
 ```bash
-OLLAMA_CPU_LIMIT=8   # было 12
 WHISPER_CPU_LIMIT=4
 WHISPER_MEM_LIMIT=4g
 WHISPER_MODEL=small
 WHISPER_LANG=ru
 ```
 
-12/16 ядер под AI-сервисы суммарно, 4 остаются на остальной стек.
-
 ## Этап 1 (готово): развернуть Whisper и проверить транскрипцию
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gitlab.yml \
   -f docker-compose.monitoring.yml -f docker-compose.automation.yml \
-  -f docker-compose.dashboard.yml -f docker-compose.ollama.yml \
-  -f docker-compose.whisper.yml --profile runner up -d --force-recreate ollama whisper
+  -f docker-compose.dashboard.yml \
+  -f docker-compose.whisper.yml --profile runner up -d whisper
 ```
-
-(`--force-recreate ollama` — чтобы подхватил новый `OLLAMA_CPU_LIMIT=8`.)
 
 Первый старт скачает модель `small` (сотни МБ) — недолго. Сервис слушает
 9000 внутри контейнера (`/asr` — приём файла, `/docs` — Swagger UI), но
-порт наружу сознательно не пробрасывается (та же логика, что с Ollama в
-`docs/local-llm.md`) — образ не основан на Alpine, `curl`/`wget` внутри
+порт наружу сознательно не пробрасывается (то же соображение приватности,
+что и с классификацией намерения — см. выше) — образ не основан на Alpine, `curl`/`wget` внутри
 него может не быть, поэтому проще всего дать контейнеру IP на
 `devops_edge` и постучаться с самого хоста (он и так в этой сети через
 Traefik-алиасы) через сервисное DNS-имя контейнера:
@@ -167,7 +165,7 @@ Extract Commands отбрасывает. Вложения к команде по
 
 Это ещё не финальная версия — просто проверка, что вся цепочка
 polling → скачивание файла → Whisper → ответ в чат реально работает,
-прежде чем добавлять Ollama-роутер и сами действия.
+прежде чем добавлять DeepSeek-роутер и сами действия.
 
 **Импорт**: Workflows → Import from File →
 `config/n8n/workflows/telegram-voice-commands.json`, активировать
@@ -195,21 +193,21 @@ Safety Net) или проверь, что workflow активен. Если вы
 без результата — смотреть, на какой ноде остановилось, либо что
 `chat_id`/членство бота в чате не совпадает.
 
-## Этап 3 (текущий): Ollama-роутер намерений
+## Этап 3 (готово): DeepSeek-роутер намерений
 
 Между транскриптом (голос или текст) и ответом теперь вставлены:
 **Build Router Prompt** (промпт с описанием 4 действий: `create_task`,
 `trigger_pipeline`, `show_dojo_report`, `unknown`) → **Call Router LLM**
-(Ollama, `format: json`) → **Parse Route** (парсинг вердикта, fallback
-на `unknown` при сбое) → **Reply in Telegram** (теперь отвечает тем,
-что понял LLM: `🤖 <reply_text> [action: ...]`).
+(DeepSeek, `deepseek-chat`, `response_format: json_object`, credential
+`DeepSeek API`) → **Parse Route** (парсинг вердикта из
+`choices[0].message.content`, fallback на `unknown` при сбое) →
+**Reply in Telegram** (теперь отвечает тем, что понял LLM:
+`🤖 <reply_text> [action: ...]`).
 
-**Модель для роутера — та же `qwen2.5:14b-instruct-q4_K_M`, что и в
-триаже DefectDojo.** Пробовали `qwen2.5:3b-instruct-q4_K_M` ради
-скорости — на практике плохо справлялась с классификацией, вернули 14B.
-На более мощном сервере имеет смысл вернуться к лёгкой модели отдельно
-для роутинга (или на GPU — там разница в скорости от размера модели
-не так болезненна, как на CPU) — пока не актуально.
+**Роутер на том же `deepseek-chat`, что и триаж DefectDojo** — модель
+одна на оба агента, ничего отдельно подбирать не пришлось (в отличие от
+прежней локальной Ollama, где разные размеры модели давали заметно
+разное качество классификации — 3B ощутимо хуже 14B).
 
 **Пока без реальных действий** — сознательно: сначала проверить, что
 LLM правильно классифицирует разные формулировки (голосом и текстом),
@@ -221,7 +219,7 @@ LLM правильно классифицирует разные формули�
 ## Этап 4a (текущий): меню на кнопках + роли (параллельно с LLM-роутером)
 
 Второй, детерминированный способ вызвать действие — без LLM, через
-`/bot` и inline-кнопки Telegram. Оба пути (голос/текст → Ollama, и
+`/bot` и inline-кнопки Telegram. Оба пути (голос/текст → DeepSeek, и
 `/bot` → кнопки) сосуществуют в одном workflow.
 
 **Как работает**: `Extract Commands` теперь различает 3 типа апдейта
@@ -315,13 +313,18 @@ Button`) теперь сходятся в одной ноде — `Authorize & R
   убраны, вместо них один общий `Send Reply`).
 - **`create_task`** — реализовано, см. Этап 5 ниже.
 
-## Этап 5 (текущее): create_task — Plane, мульти-проект, без вложений
+## Этап 5 (текущее): create_task — 2btask, мульти-проект, без вложений
 
-API Plane — новый `/api/v1/.../work-items/` (не устаревший `/issues/`),
-авторизация заголовком `X-API-Key`. Список проектов **не** захардкожен
-(в отличие от `PRODUCTS` для DefectDojo) — их может быть много, поэтому
-получаем живым запросом к API в момент создания задачи, а не держим
-статический список.
+Изначально был Plane (`/api/v1/.../work-items/`, `X-API-Key`) — заменён
+на собственный `yunisv/2btask` вместе со всей платформой
+(`docs/adding-2btask.md`). API v1 2btask (`server/INTEGRATION.md` в том
+репозитории) устроен проще, чем Plane, в двух местах: `/api/v1/projects`
+отдаёт голый список без пагинации (никакого курсора), а вложений у него
+пока нет вообще — см. Этап 6.
+
+Список проектов **не** захардкожен (в отличие от `PRODUCTS` для
+DefectDojo) — их может быть много, поэтому получаем живым запросом к
+API в момент создания задачи, а не держим статический список.
 
 **Флоу** (одинаковый что через кнопку "Создать задачу", что голосом/
 текстом — оба сходятся в `Authorize & Route`):
@@ -329,29 +332,24 @@ API Plane — новый `/api/v1/.../work-items/` (не устаревший `/
 1. `Authorize & Route`, `action === 'create_task'` → заводит в workflow
    static data `pendingTasks[userId] = { title: null, project: null,
    assignee: null }`, роутит на `create_task_pick_project`.
-2. **List Plane Projects** (`GET
-   /api/v1/workspaces/2be/projects/?per_page=8&cursor=...`) → **Build
-   Project Picker** — сохраняет список текущей страницы в
-   `pendingTasks[userId].projectChoices` и строит кнопки. Важно:
-   `callback_data` несёт не сам ID проекта (UUID, не влезет в лимит
-   Telegram в 64 байта на кнопку), а **индекс** в списке текущей
-   страницы (`planeproj:<idx>`) — сам ID достаётся из static data при
-   нажатии.
-
-   **Пагинация** — Plane отдаёт курсорную (`next_cursor`/`prev_cursor`/
-   `next_page_results`/`prev_page_results`), не offset-based. Если
-   проектов больше 8 — снизу добавляется строка кнопок "◀️ Назад" /
-   "Дальше ▶️" (`callback_data: planeprojpage:<cursor>` — курсор Plane
-   сам может содержать двоеточия, поэтому `Handle Button` берёт всё
-   после префикса целиком, не через `split(':')`). Нажатие идёт в
-   `Is Plane Project Page` → напрямую в тот же `List Plane Projects` с
-   новым курсором, минуя `Authorize & Route` (та же логика, что у
-   drill-down в отчёте DefectDojo — навигация внутри уже разрешённого
-   действия, повторно права не проверяются).
-3. Нажатие → `Handle Button` (`kind: 'plane_project_pick'`) → **Handle
+2. **List 2btask Projects** (`GET /api/v1/projects`, credential
+   `2btask API`) → **Build Project Picker** — n8n сам раскладывает
+   голый JSON-массив ответа на отдельные item'ы (тот же приём, что и у
+   `Build GitLab Project Picker` в Этапе 7), нода собирает их обратно
+   через `$input.all()`, сохраняет в
+   `pendingTasks[userId].projectChoices` и строит кнопки. `callback_data`
+   несёт не сам ID проекта, а **индекс** в списке (`taskproj:<idx>`) —
+   сам ID достаётся из static data при нажатии. Пагинации нет — у
+   компании такого размера один запрос без курсора возвращает все
+   проекты сразу, лишнего шага не потребовалось (в отличие от Plane,
+   у которого была курсорная — `Is Task Project Page` в графе воркфлоу
+   всё ещё есть, но `kind: 'task_project_page'` теперь никто не
+   отправляет, это неактивная ветка на случай, если пагинация в 2btask
+   когда-нибудь появится).
+3. Нажатие → `Handle Button` (`kind: 'task_project_pick'`) → **Handle
    Project Pick** — сохраняет выбранный проект, строит кнопки
    исполнителей из таблицы `USERS` (та же, что для ролей/меню —
-   **четвёртая** копия, теперь с полем `planeUserId`).
+   **четвёртая** копия, теперь с полем `taskboardUserId`).
 4. Нажатие → **Handle Assignee Pick** — сохраняет исполнителя,
    взводит `staticData.awaitingTitleFor = {userId, expiresAt}` (5 минут)
    и просит название.
@@ -363,70 +361,50 @@ API Plane — новый `/api/v1/.../work-items/` (не устаревший `/
    один в один, отличается только развилка в конце: новая нода **Is Task
    Title** (проверяет `_kind` исходного апдейта, не текущий `$json`, та же
    логика что и везде для ссылок на предыдущие ноды) отправляет
-   транскрипт либо в **Finalize Plane Task** (если это название задачи),
+   транскрипт либо в **Finalize Task** (если это название задачи),
    либо как раньше в `Build Router Prompt` (LLM-роутер).
-6. **Finalize Plane Task** — собирает `project`+`assignee`+`title` из
-   static data → **Plane Task Ready?** → **Create Plane Task** (`POST
-   .../work-items/`, body `{name, assignees: [planeUserId]}`) →
-   **Report Task Created** (чистит `pendingTasks[userId]`, шлёт
-   подтверждение со ссылкой на задачу) → `Send Reply`.
+6. **Finalize Task** — собирает `project`+`assignee`+`title` из
+   static data → **Task Ready?** → **Create 2btask Task** (`POST
+   /api/v1/tasks`, body `{title, projectId, assigneeId, externalRef}`,
+   заголовок `Idempotency-Key` — повтор того же выполнения ноды не
+   заведёт вторую задачу) → **Report Task Created** (чистит
+   `pendingTasks[userId]`, шлёт подтверждение со ссылкой на задачу) →
+   `Send Reply`.
 
 **Обязательно перед использованием**:
-- Credential **Plane API** (Header Auth, `X-API-Key` = токен) —
-  привязать в трёх нодах: `List Plane Projects`, `Create Plane Task`.
-- Заполнить `planeUserId` у каждого в `USERS` (**четыре** копии теперь:
-  `Build Menu`, `Authorize & Route`, `Handle Project Pick`, `Handle
-  Assignee Pick` — везде вписывать одинаково). Member id смотреть через
-  `GET /api/v1/workspaces/2be/members/` с тем же `X-API-Key`.
+- Credential **2btask API** (Header Auth, `X-API-Key` = ключ сервисной
+  учётки из 2btask: Интеграции → Сервисные учётки → Выпустить ключ,
+  области `tasks:write`+`directories:read`) — привязать в двух нодах:
+  `List 2btask Projects`, `Create 2btask Task`.
+- Заполнить `taskboardUserId` у каждого в `USERS` (**четыре** копии
+  теперь: `Build Menu`, `Authorize & Route`, `Handle Project Pick`,
+  `Handle Assignee Pick` — везде вписывать одинаково). Id пользователя
+  смотреть через `GET /api/v1/users` с тем же ключом (поле `id`).
 
-## Этап 6 (текущее): вложения к create_task — фото/документ
+## Этап 6 (не реализовано): вложения к create_task — фото/документ
 
-Самая рискованная часть из всего бота — трёхшаговый presigned-upload
-Plane (получить credentials на загрузку → залить файл напрямую в S3/
-хранилище → подтвердить) плюс работа с бинарными данными внутри
-код-ноды. Выше, чем обычно, шанс, что понадобится ещё живая правка.
+У Plane был трёхшаговый presigned-upload (получить credentials на
+загрузку → залить файл напрямую в S3/хранилище → подтвердить) — у
+2btask `/api/v1` пока нет ручки для вложений вообще (см.
+`server/INTEGRATION.md` в репозитории `yunisv/2btask`: только tasks/
+time-logs/справочники). Придумывать несуществующий эндпоинт не стали.
 
-Пока ждём название (`awaitingTitleFor` взведён, после выбора
-исполнителя) — три случая:
-- **фото/документ с подписью** — подпись используется как название,
-  вложение и финализация происходят одним сообщением (Telegram это
-  поддерживает: картинка/файл + текст в том же сообщении — подпись);
-- **фото/документ без подписи** — вложение добавляется в очередь
-  (`pendingTasks[userId].attachments` — **массив**, можно прислать
-  сколько угодно файлов подряд, каждый добавляется, не перетирает
-  предыдущий), ждём title отдельным сообщением;
-- **голос/текст** — финализирует как обычно (с любыми вложениями, что
-  успели накопиться в очереди, если успели).
+Пока рабочий компромисс: `Extract Commands`/очередь вложений
+(`pendingTasks[userId].attachments`) в коде оставлены как задел — если
+пользователь всё же присылает фото/документ до названия, они копятся
+в очереди так же, как копились бы для будущей загрузки, но нода
+**Note Skipped Attachments** (после `Create 2btask Task`, вместо
+прежней `Upload Attachments to Plane`) их никуда не отправляет — только
+считает и передаёт число в **Report Task Created**, который честно
+предупреждает в чате: "N вложений не отправлено — добавь вручную по
+ссылке на задачу". Разово открыть задачу в 2btask и приложить файлы
+там — секундное дело, а не барьер для использования бота.
 
-- `Extract Commands` — блок ожидания названия теперь стоит **до**
-  общего гейта по voice/text и разбирает `msg.photo`/`msg.document`
-  отдельно (`_kind: 'task_attachment'`), продолжая ждать title.
-- **Is Task Attachment** → **Queue Attachment** — добавляет
-  `{fileId, fileName, mimeType}` в массив `pendingTasks[userId]
-  .attachments`, продлевает окно ожидания на 5 минут, отвечает
-  подтверждением с текущим количеством.
-- После `Create Plane Task` — **Has Attachment?** (проверяет, что
-  массив не пуст) → если есть: **Upload Attachments to Plane** — одна
-  код-нода, циклом по всем вложениям сразу. Для каждого — весь
-  трёхшаговый flow Plane (получить presigned upload → собрать raw
-  multipart/form-data вручную с бинарником файла → залить → подтвердить
-  `PATCH .../attachments/{asset_id}/`), включая само скачивание файла
-  из Telegram — тоже внутри той же ноды, через `this.helpers
-  .httpRequest` (не отдельными HTTP-нодами, как раньше, — иначе
-  пришлось бы городить loop-ноду n8n и таскать бинарник между
-  итерациями между нодами, а тут всё в одном JS-скоупе на итерацию
-  цикла). Считает `uploaded`/`failed` по каждому файлу отдельно, ни
-  один сбой не блокирует остальные вложения или саму задачу.
-- **Код-нода не может использовать n8n credential напрямую** — только
-  HTTP Request-ноды умеют. Поэтому в `Upload Attachments to Plane` оба
-  токена (Plane и Telegram-бота) вписаны явно в переменные
-  `PLANE_TOKEN`/`BOT_TOKEN` — тот же паттерн, что уже был с токеном
-  Telegram-бота в остальном workflow, не новый прецедент, но токены
-  теперь буквально в тексте кода ноды, а не только в credential —
-  учитывать при экспорте/шаринге файла воркфлоу.
-
-**Обязательно перед использованием**: вписать `PLANE_TOKEN` в ноде
-`Upload Attachments to Plane`.
+Если 2btask обзаведётся ручкой для вложений в `/api/v1` — вернуться к
+этому этапу и реализовать загрузку по аналогии с тем, что было у Plane
+(бинарник скачивается из Telegram тем же `this.helpers.httpRequest`
+внутри код-ноды, без отдельных HTTP-нод — уже отработанный в прежней
+версии этой ноды приём).
 
 ## Этап 7 (готово): trigger_pipeline — запуск пайплайна GitLab
 
@@ -465,10 +443,11 @@ downstream-пайплайны. Вывод: не нужно, оба свойст�
 ### Что сделал бот
 
 Кнопка «🚀 Поднять пайплайн» (только у роли `admin`, см.
-`ROLE_ACTIONS`) → тот же паттерн динамического пагинированного
-пикера, что и у Plane-проектов в `create_task`, только без шага
-названия/исполнителя — сразу после выбора проекта пайплайн
-запускается:
+`ROLE_ACTIONS`) → тот же паттерн динамического пикера проектов, что и
+у 2btask в `create_task`, только с пагинацией (GitLab-проектов может
+быть много, `/api/v4/projects` листает постранично — в отличие от
+`/api/v1/projects` у 2btask) и без шага названия/исполнителя — сразу
+после выбора проекта пайплайн запускается:
 
 - **Route: Trigger Pipeline?** (в `Authorize & Route`, action
   `trigger_pipeline`) — заводит `pendingPipelines[userId]`, роутит на

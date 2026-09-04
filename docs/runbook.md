@@ -19,7 +19,6 @@
 | Loki + Promtail | — (внутренние, смотреть через Grafana) | логи всех контейнеров | — | `docker-compose.monitoring.yml` |
 | node-exporter / cAdvisor | — (внутренние) | метрики хоста / метрики контейнеров | — | `docker-compose.monitoring.yml` |
 | n8n | `automation.` | автоматизация вебхуков, площадка для будущих AI-агентов | 5678 | `docker-compose.automation.yml` |
-| Ollama | — (внутренний, только для n8n) | локальный LLM для AI-агентов, без публичного роута | 11434 | `docker-compose.ollama.yml`, `docs/local-llm.md` |
 | Homepage | `dash.` | стартовая страница со всеми сервисами (auto-discovery по docker-лейблам) | 3000 | `docker-compose.dashboard.yml` |
 | oauth2-proxy | (обслуживает `dash.`) | SSO-гейт перед Homepage через Keycloak | 4180 | `docker-compose.dashboard.yml` |
 | 2btask | `2btask.` | issue tracking / PM, свой сервис (репозиторий `yunisv/2btask`), SSO через Keycloak platform-realm `devops` | 80 (client) | `docs/adding-2btask.md` |
@@ -76,7 +75,7 @@ middleware `internal-only@file` — отвечает только пирам с�
 | ✅ | GitLab-пайплайн импортирует находки SAST/secret-detection в DefectDojo |
 | ✅ | Единый вход через Keycloak — GitLab (нативный OIDC), Grafana (нативный OIDC), n8n (сторонний `n8n-oidc`, см. `docs/service-sso.md` про риски при апдейте образа), 2btask (нативный OIDC, `docs/adding-2btask.md`) |
 | ⬜ | NetBird Access Control (пока не настроено — актуально, когда подключится больше людей) |
-| ✅ | AI-агенты в n8n (`docs/ai-agents-roadmap.md`) — пункт 2 (триаж находок DefectDojo) полностью работает end-to-end на реальном сервере: локальная LLM (Ollama, Qwen2.5 14B, `docs/local-llm.md`) → заметки с обоснованием + обновление severity/tags в DefectDojo → создание issue в GitLab для Critical, проверено вживую (`docs/ai-agent-defectdojo-triage.md`). Пункты 1/3/4/5 — по плану дальше. |
+| ✅ | AI-агенты в n8n (`docs/ai-agents-roadmap.md`) — пункт 2 (триаж находок DefectDojo) полностью работает end-to-end: LLM — DeepSeek API (`api.deepseek.com`, credential `DeepSeek API`; заменил локальную Ollama — снесена 2026-09-04, освободила ~11GB RAM/диска) → заметки с обоснованием + обновление severity/tags в DefectDojo → создание issue в GitLab для Critical, проверено вживую (`docs/ai-agent-defectdojo-triage.md`). Telegram voice-bot (`docs/telegram-bot.md`) тоже переведён на DeepSeek и на 2btask вместо Plane для create_task — код обновлён (`config/n8n/workflows/telegram-voice-commands.json`), но `USERS`/`taskboardUserId` там ещё пустые заглушки, реально в n8n не активировано. Пункты 1/3/4/5 роадмапа — по плану дальше. |
 
 ## Быстрые ссылки
 

@@ -1,8 +1,8 @@
 # Local speech-to-text for the Telegram voice-command bot (docs/telegram-bot.md).
-# Transcribes voice messages before n8n hands the text to Ollama for intent
-# routing — kept local for the same reason as the LLM: voice commands can
-# reference internal project/finding details, no reason to ship that to a
-# third party when the server can do it itself.
+# Transcribes voice messages before n8n hands the text to DeepSeek for intent
+# routing — kept local unlike the LLM call: voice commands can reference
+# internal project/finding details, no reason to ship raw audio to a third
+# party when the server can transcribe it itself.
 
 # NOT external:true — see docker-compose.gitlab.yml for why.
 networks:
@@ -26,9 +26,8 @@ services:
       - whisper-cache:/root/.cache
     networks:
       - edge
-    # Shares the host with Ollama (see docs/local-llm.md) — sized to leave
-    # both AI services able to run at once without starving GitLab/DefectDojo.
-    # If OLLAMA_CPU_LIMIT is still 12 from before this was added, drop it to
-    # 8 in .env so the two don't add up to more than ~12/16 together.
+    # Sized to leave headroom for GitLab/DefectDojo — the intent-routing LLM
+    # is now a SaaS API call (DeepSeek), not a local process competing for
+    # the same CPU/RAM, so this no longer needs to be split with anything.
     mem_limit: ${WHISPER_MEM_LIMIT:-4g}
     cpus: ${WHISPER_CPU_LIMIT:-4}

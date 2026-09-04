@@ -7,7 +7,10 @@
 `homepage.*` (они уже проставлены рядом с Traefik-лейблами в каждом
 `docker-compose.*.yml`), поэтому новый сервис появляется на странице сам.
 Вручную в `config/homepage/services.yaml` добавляются только те штуки,
-что ставятся своими установщиками — Plane, DefectDojo, Harbor.
+что ставятся своими установщиками — DefectDojo, Harbor. 2btask, хоть и
+не в основном наборе `docker-compose.*.yml`, свои лейблы получает через
+`docker-compose.override.yml` при деплое (`docs/adding-2btask.md`) —
+тоже auto-discovery, ручная запись не нужна.
 
 Почему oauth2-proxy, а не `thomseddon/traefik-forward-auth`, который чаще
 встречается в гайдах: у последнего нет коммитов с 2021 года.

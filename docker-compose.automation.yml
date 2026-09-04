@@ -1,6 +1,6 @@
 # Automation glue: n8n. Receives webhooks from GitLab (MR opened, pipeline
-# finished), Plane (task created/updated), DefectDojo (new finding),
-# Alertmanager, etc. and routes them to Slack/Telegram/Plane tickets. This
+# finished), 2btask (task created/updated), DefectDojo (new finding),
+# Alertmanager, etc. and routes them to Slack/Telegram/2btask tickets. This
 # is also the intended host for the future AI-agent workflows (see
 # docs/ai-agents-roadmap.md) — n8n calls out to an LLM API node and feeds
 # the result back into the pipeline (e.g. as a GitLab MR comment or a gate).
@@ -50,17 +50,20 @@ services:
       OIDC_CLIENT_ID: ${N8N_OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${N8N_OIDC_CLIENT_SECRET}
       OIDC_REDIRECT_URI: https://automation.${BASE_DOMAIN}/auth/oidc/callback
-      # Токен Telegram-бота и Plane API — читаются из $env внутри нод
-      # telegram-voice-commands.json (HTTP Request URL-expression'ы,
-      # код-ноды) вместо того, чтобы быть вписанными буквально в каждую
-      # ноду по отдельности — ротация токена (например, после
-      # компрометации бота) = поменять тут и в .env, ноды не трогать.
+      # Токен Telegram-бота — читается из $env внутри код-нод
+      # telegram-voice-commands.json (скачивание файлов из Telegram через
+      # this.helpers.httpRequest — код-нода не умеет использовать n8n
+      # credential напрямую, только HTTP Request-ноды) вместо того, чтобы
+      # быть вписанным буквально в каждую ноду по отдельности — ротация
+      # токена (например, после компрометации бота) = поменять тут и в
+      # .env, ноды не трогать. 2btask API так не читается — доступ туда
+      # идёт только из HTTP Request-нод, поэтому это обычный n8n credential
+      # (Header Auth "2btask API"), не переменная окружения.
       # N8N_BLOCK_ENV_ACCESS_IN_NODE=false — явно, чтобы $env точно был
       # доступен в код-нодах/expression вне зависимости от дефолта
       # конкретной версии n8n (в части версий community по умолчанию
       # заблокирован из соображений безопасности).
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      PLANE_TOKEN: ${PLANE_TOKEN}
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
     volumes:
       - n8n-data:/home/node/.n8n

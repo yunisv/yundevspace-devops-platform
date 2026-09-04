@@ -25,7 +25,6 @@ VCS + CI/CD + registry + SAST (через GitLab CE), управление за�
 | Мониторинг | `docker-compose.monitoring.yml` | Prometheus, Grafana, Loki, Promtail, Alertmanager, node-exporter, cAdvisor |
 | Автоматизация / AI-агенты | `docker-compose.automation.yml` | n8n |
 | Стартовая страница + SSO | `docker-compose.dashboard.yml` | Homepage, oauth2-proxy |
-| Локальный LLM для AI-агентов | `docker-compose.ollama.yml` | Ollama — см. [docs/local-llm.md](docs/local-llm.md) |
 
 Стартовая страница (`dash.`) собирает плитки сервисов **автоматически** из
 docker-лейблов `homepage.*` — добавили сервис в стек, он появился на
@@ -118,7 +117,7 @@ ufw. Сертификаты выпускаются через DNS-01, так ч�
 |---|---|---|---|
 | Минимум (core + GitLab) | 4 | 8-10 GB | 60 GB SSD |
 | Рекомендуемый (+ мониторинг + автоматизация) | 6-8 | 16 GB | 150 GB SSD |
-| + Plane | 10-12 | 22-24 GB | 150 GB SSD |
+| + 2btask | 6-8 | 18 GB | 150 GB SSD |
 | + DefectDojo/Harbor поверх | 12-16 | 28-32 GB | 300+ GB SSD (registry растёт быстро) |
 
 Подробности и пример `.gitlab-ci.yml` с публикацией находок в DefectDojo — в `docs/architecture.md`.

@@ -1,7 +1,8 @@
-# AI-агент №2: триаж находок DefectDojo (n8n + Ollama)
+# AI-агент №2: триаж находок DefectDojo (n8n + DeepSeek)
 
 Первый пункт из `docs/ai-agents-roadmap.md`, реализованный в коде: LLM
-(локальная, через Ollama — см. `docs/local-llm.md`) оценивает каждую новую
+(DeepSeek API, `api.deepseek.com` — раньше была локальная Ollama, снята
+2026-09-04 ради простоты) оценивает каждую новую
 находку после импорта скана, пишет обоснование в Notes находки, при
 необходимости поправляет severity, и для критичных случаев сразу создаёт
 issue в GitLab — без блокировки пайплайна, только советует/размечает.
@@ -12,7 +13,7 @@ issue в GitLab — без блокировки пайплайна, только
 GitLab CI импортирует скан в DefectDojo (уже работает)
   → DefectDojo шлёт Notification Webhook (событие scan_added) в n8n
   → n8n запрашивает находки этого теста через API DefectDojo
-  → на каждую ещё не размеченную находку — запрос к Ollama с промптом
+  → на каждую ещё не размеченную находку — запрос к DeepSeek с промптом
   → ответ LLM (JSON: severity/reasoning/create_issue)
   → POST заметка в находку + PATCH severity/tags (тег llm-triaged — от
     повторного триажа при реимпорте того же теста)
@@ -63,6 +64,7 @@ done that created/updated/closed findings") и `scan_added_empty`.
 |---|---|---|
 | `DefectDojo API` | `Authorization` | `Token <API-токен из шага 1>` |
 | `GitLab API` | `PRIVATE-TOKEN` | `<Personal/Project Access Token с правами api>` |
+| `DeepSeek API` | `Authorization` | `Bearer <ключ с platform.deepseek.com>` |
 
 Токен GitLab — Project Access Token с ролью Reporter+ и правом `api`,
 привязанный к проекту(ам), куда должны создаваться issue.
@@ -79,11 +81,12 @@ done that created/updated/closed findings") и `scan_added_empty`.
    привязывается по имени не всегда автоматически — если нода показывает
    "credential not set", выбрать вручную из списка).
 2. То же для **Create GitLab Issue** → credential `GitLab API`.
-3. Открыть ноду **Map Product to GitLab Project**, вписать реальный ID
+3. То же для **Call DeepSeek** → credential `DeepSeek API`.
+4. Открыть ноду **Map Product to GitLab Project**, вписать реальный ID
    проекта(ов) в `PRODUCT_TO_PROJECT` (ID проекта — на странице проекта
    в GitLab, под названием — "Project ID: 123"). Имя ключа — точное имя
    продукта в DefectDojo (Product name), не название GitLab-проекта.
-4. Активировать workflow (тумблер **Active** вверху).
+5. Активировать workflow (тумблер **Active** вверху).
 
 ## 4. Проверка
 
@@ -99,8 +102,9 @@ SAST/secret-detection в DefectDojo) — реимпорт теста вызов�
    test.test_id ?? ...` под то, что реально пришло (видно в самом JSON
    входа этой ноды).
 3. Если `test_id` подтянулся — дальше по цепочке смотреть, вернула ли
-   **Get Findings** непустой список, и что ответила **Call Ollama**
-   (модель уже проверена вживую — `docs/local-llm.md`).
+   **Get Findings** непустой список, и что ответила **Call DeepSeek**
+   (проверить, что credential `DeepSeek API` привязан и ключ рабочий,
+   если нода падает с 401/403).
 4. В самом DefectDojo — открыть одну из находок, проверить, что в Notes
    появилась запись с обоснованием, а severity/tags обновились.
 5. Если LLM сочла что-то Critical — проверить, что issue реально создался
