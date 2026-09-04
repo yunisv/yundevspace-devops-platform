@@ -2,9 +2,10 @@
 
 Docker-based скелет внутренней платформы для команды 10-50 разработчиков:
 VCS + CI/CD + registry + SAST (через GitLab CE), управление задачами/PM
-(Plane), управление уязвимостями (DefectDojo), мониторинг и слой
-автоматизации с заделом под AI-агентов (n8n). Подробная архитектура и
-обоснование выбора — в [docs/architecture.md](docs/architecture.md).
+(2btask, свой сервис), управление уязвимостями (DefectDojo),
+мониторинг и слой автоматизации с заделом под AI-агентов (n8n).
+Подробная архитектура и обоснование выбора — в
+[docs/architecture.md](docs/architecture.md).
 
 **Карта всех сервисов (кто за что отвечает, где настроено) и статус
 текущего деплоя — [docs/runbook.md](docs/runbook.md).**
@@ -31,12 +32,16 @@ docker-лейблов `homepage.*` — добавили сервис в стек
 странице. Подробности и настройка SSO — в
 [docs/dashboard-sso.md](docs/dashboard-sso.md).
 
-Plane (issue tracking/PM), DefectDojo (агрегация находок SAST/DAST/SCA) и
-Harbor (registry с расширенным сканированием, если GitLab-registry+Trivy
-окажется недостаточно) подключаются отдельно официальными установщиками —
-их self-hosted дистрибутивы это 5-8 взаимозависимых сервисов каждый,
-вендорить такое в свой compose и держать в синхроне с апстримом не стоит.
-Инструкции: [docs/adding-plane.md](docs/adding-plane.md),
+2btask (issue tracking/PM, свой репозиторий `yunisv/2btask`,
+единый вход через уже поднятый в этом стеке Keycloak), DefectDojo
+(агрегация находок SAST/DAST/SCA) и Harbor (registry с расширенным
+сканированием, если GitLab-registry+Trivy окажется недостаточно)
+подключаются отдельно от основного набора слоёв. DefectDojo/Harbor —
+официальными установщиками (5-8 взаимозависимых сервисов каждый,
+вендорить такое в свой compose и держать в синхроне с апстримом не
+стоит); 2btask — обычным `git clone` + Traefik/Homepage override,
+это свой код, а не вендорский дистрибутив. Инструкции:
+[docs/adding-2btask.md](docs/adding-2btask.md),
 [docs/adding-defectdojo-harbor.md](docs/adding-defectdojo-harbor.md).
 Roadmap по AI-агентам — в [docs/ai-agents-roadmap.md](docs/ai-agents-roadmap.md).
 
@@ -51,7 +56,7 @@ API Tokens — не старая `dns.hetzner.com`, токены оттуда н
 wildcard `*.${BASE_DOMAIN}`, иначе A-записи на каждый поддомен:
 
 `git`, `registry`, `sso`, `traefik`, `grafana`, `prometheus`, `alerts`,
-`automation`, `dash` (+ `pm` и `dojo`, если ставите Plane/DefectDojo).
+`automation`, `dash` (+ `pm` и `dojo`, если ставите 2btask/DefectDojo).
 Записи указывают на IP этого сервера **в сети NetBird**, не на публичный —
 см. [docs/vpn-netbird.md](docs/vpn-netbird.md), его нужно поставить и
 подключить этот сервер как peer до запуска `install.sh`.
@@ -89,9 +94,9 @@ sudo ./scripts/install.sh                       # gitlab + мониторинг 
 2. `https://git.${BASE_DOMAIN}` — залогиниться как `root` / `GITLAB_ROOT_PASSWORD`, создать первую группу/проект.
 3. Admin Area → CI/CD → Runners → New instance runner — скопировать токен, прописать в `.env` как `GITLAB_RUNNER_TOKEN`, поднять раннер (он в профиле `runner`, поэтому сам не стартует): `docker compose -f docker-compose.yml -f docker-compose.gitlab.yml --profile runner up -d`
 4. `https://grafana.${BASE_DOMAIN}` — датасорсы Prometheus/Loki и дашборды (Node Exporter Full, Docker Containers) уже прописаны автоматически.
-5. `https://automation.${BASE_DOMAIN}` — **сразу создать owner-аккаунт** (n8n убрал basic-auth в версии 1.0, доступ закрывает только собственный аккаунт — пока он не создан, занять его может любой, кто откроет адрес), затем настроить workflow'ы под вебхуки GitLab/Plane/DefectDojo/Alertmanager.
+5. `https://automation.${BASE_DOMAIN}` — **сразу создать owner-аккаунт** (n8n убрал basic-auth в версии 1.0, доступ закрывает только собственный аккаунт — пока он не создан, занять его может любой, кто откроет адрес), затем настроить workflow'ы под вебхуки GitLab/DefectDojo/Alertmanager.
 6. Стартовая страница `https://dash.${BASE_DOMAIN}` со всеми сервисами — поднимается отдельно, после настройки realm/клиента в Keycloak: [docs/dashboard-sso.md](docs/dashboard-sso.md), затем `./scripts/up.sh dashboard`.
-7. Plane ставится отдельно по [docs/adding-plane.md](docs/adding-plane.md) — там же настройка GitLab-интеграции и вебхуков в n8n.
+7. 2btask ставится отдельно по [docs/adding-2btask.md](docs/adding-2btask.md).
 8. **Закрыть публичный интерфейс**: `sudo ./scripts/harden.sh` — только после того, как проверили, что через NetBird всё открывается ([docs/vpn-netbird.md](docs/vpn-netbird.md)).
 
 ## Доступ и сетевая безопасность

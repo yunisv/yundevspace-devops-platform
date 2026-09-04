@@ -8,23 +8,28 @@ n8n Community своего SSO не имеет вообще (это Enterprise-�
 для него используется сторонний bolt-on (`n8n-oidc`, external hooks) — см.
 раздел про n8n ниже, там же и его реальные риски.
 
-Все три подключаются к тому же realm `devops`, что уже создан для
+Все подключаются к тому же realm `devops`, что уже создан для
 дашборда — токены Keycloak-сессии не расшариваются между сервисами
 автоматически (не единая cookie, как у `oauth2-proxy`-сервисов), но
 человеку достаточно один раз ввести пароль от Keycloak при входе в каждый
 сервис отдельно, вместо отдельных паролей для каждого.
 
-## 1. Создать три клиента в Keycloak
+`2btask` (issue tracking/PM, замена Plane — `docs/adding-2btask.md`)
+подключается тем же способом: свой OIDC-код (`server/app/services/sso.py`),
+просто ещё один клиент в этом же realm.
+
+## 1. Создать клиенты в Keycloak
 
 `https://sso.${BASE_DOMAIN}` → realm **devops** → **Clients** → **Create
-client**, три раза подряд с этими настройками (Client authentication:
-**On** — иначе не будет вкладки Credentials с секретом):
+client**, по одному разу на каждый сервис с этими настройками (Client
+authentication: **On** — иначе не будет вкладки Credentials с секретом):
 
 | Client ID | Valid redirect URIs | Web origins |
 |---|---|---|
 | `gitlab` | `https://git.${BASE_DOMAIN}/users/auth/openid_connect/callback` | `https://git.${BASE_DOMAIN}` |
 | `grafana` | `https://grafana.${BASE_DOMAIN}/login/generic_oauth` | `https://grafana.${BASE_DOMAIN}` |
 | `n8n` | `https://automation.${BASE_DOMAIN}/auth/oidc/callback` | `https://automation.${BASE_DOMAIN}` |
+| `2btask` | `https://pm.${BASE_DOMAIN}/auth/callback` | `https://pm.${BASE_DOMAIN}` |
 
 После сохранения каждого — вкладка **Credentials** → скопировать **Client
 Secret**.
@@ -41,6 +46,10 @@ GRAFANA_OIDC_CLIENT_SECRET=<секрет из Credentials>
 N8N_OIDC_CLIENT_ID=n8n
 N8N_OIDC_CLIENT_SECRET=<секрет из Credentials>
 ```
+
+`2btask` — секреты идут не в `.env` этого репозитория, а в
+`.env` самого 2btask на сервере (`SSO_CLIENT_ID`/`SSO_CLIENT_SECRET`/
+`SSO_ISSUER_URL`/`SSO_REDIRECT_URI`) — см. `docs/adding-2btask.md`.
 
 ## 3. Поднять
 
@@ -67,6 +76,12 @@ docker compose -f docker-compose.yml -f docker-compose.gitlab.yml \
   `EXTERNAL_FRONTEND_HOOKS_URLS`). Чтобы зайти обычным email/паролем
   (например, самим owner-аккаунтом, если он был создан раньше) — добавить
   `?showLogin=true` к адресу.
+- **2btask**: кнопка **Войти через Keycloak** на форме входа
+  появляется, только если `SSO_ENABLED=true` и остальные `SSO_*`
+  заданы (`GET /api/auth/sso/status`). Пароль остаётся рабочим всегда —
+  SSO дополняет вход, не заменяет. Вход по Keycloak находит уже
+  существующего активного сотрудника по email и не заводит нового —
+  доступ по-прежнему выдаёт администратор через «Сотрудники».
 
 ## n8n: что именно происходит и в чём риск
 

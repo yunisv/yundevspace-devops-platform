@@ -1,4 +1,13 @@
-# Подключение Plane (issue tracking / PM)
+# Подключение Plane (issue tracking / PM) — архив
+
+**Plane больше не используется на этой платформе** — заменён на
+`2btask` на том же поддомене `pm.${BASE_DOMAIN}`, см.
+[adding-2btask.md](adding-2btask.md). Документ оставлен как
+есть ради диагностики Traefik/504 ниже, на которую ссылаются
+`adding-defectdojo-harbor.md` и `adding-2btask.md` — по шагам
+установки Plane больше не сверяться.
+
+---
 
 Как и DefectDojo/Harbor, Plane не описан в этом скелете как ещё один
 `docker-compose.*.yml`: официальный self-hosted дистрибутив — это

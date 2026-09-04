@@ -276,6 +276,7 @@ DNS: поддомены должны резолвиться в адрес ${BASE
   5. Проверить, что через NetBird открывается https://git.${BASE_DOMAIN}, и
      только ПОСЛЕ этого закрыть публичный интерфейс (docs/vpn-netbird.md):
      sudo ./scripts/harden.sh
-  6. Plane / DefectDojo / Harbor ставятся отдельно официальными установщиками —
-     см. docs/adding-plane.md и docs/adding-defectdojo-harbor.md.
+  6. 2btask (git clone + Traefik override) и DefectDojo/Harbor
+     (официальные установщики) ставятся отдельно — см.
+     docs/adding-2btask.md и docs/adding-defectdojo-harbor.md.
 EOF
